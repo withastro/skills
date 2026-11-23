@@ -127,7 +127,6 @@
         "An adapter for Node is installed and set in the Astro config.",
         "The config does not use `output: 'hybrid'`."
       ],
-      "build_check": true,
       "file_checks": [
         {
           "id": "endpoint-exists",
@@ -154,6 +153,22 @@
           "contains": [
             "\"@astrojs/node\""
           ]
+        }
+      ],
+      "output_checks": [
+        {
+          "id": "endpoint-not-prerendered",
+          "path": "client/api/time.json",
+          "exists": false
+        },
+        {
+          "id": "endpoint-not-prerendered-static",
+          "path": "api/time.json",
+          "exists": false
+        },
+        {
+          "id": "home-still-prerendered",
+          "path": "client/index.html"
         }
       ]
     },
@@ -338,6 +353,261 @@
           ],
           "not_contains": [
             "process\\.e[n]v"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "inline-byline",
+      "fixture": "astro-site",
+      "should_trigger": true,
+      "prompt": "In this Astro project, extend the PostHeader component to show a byline under the title that reads like \"By Ada Lovelace on 10 December 1815\", with the author name in bold and the date in a <time> element that has a machine-readable datetime attribute.",
+      "expected_output": "The built home page shows the byline with a space on each side of the bold author name and before the date, and the date is in a <time> element with a datetime attribute.",
+      "assertions": [
+        "The rendered byline reads \"By Ada Lovelace on 10 December 1815\" with spaces between the words and the inline elements.",
+        "The author name is in a `<strong>` element and the date in a `<time datetime=...>` element."
+      ],
+      "file_checks": [
+        {
+          "id": "time-element",
+          "path": "src/components/PostHeader.astro",
+          "contains": [
+            "<time",
+            "datetime=",
+            "<strong"
+          ]
+        }
+      ],
+      "output_checks": [
+        {
+          "id": "space-after-by",
+          "path": "index.html",
+          "contains": [
+            "By(\\s|&nbsp;|&#32;|&#x20;)+<strong[^>]*>\\s*Ada Lovelace\\s*</strong>"
+          ]
+        },
+        {
+          "id": "space-around-on",
+          "path": "index.html",
+          "contains": [
+            "</strong>(\\s|&nbsp;|&#32;|&#x20;)+on(\\s|&nbsp;|&#32;|&#x20;)+<time"
+          ]
+        },
+        {
+          "id": "date-rendered",
+          "path": "index.html",
+          "contains": [
+            "<time[^>]*datetime=\"1815-12-10[^\"]*\"[^>]*>\\s*10 December 1815\\s*</time>"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "env-flag",
+      "fixture": "astro-site",
+      "should_trigger": true,
+      "prompt": "In this Astro project, show a paragraph with the text \"This site is in beta.\" at the top of the home page, but only when the PUBLIC_SHOW_BETA environment variable is set to true. The .env file currently sets it to false.",
+      "expected_output": "The home page renders the beta notice only when PUBLIC_SHOW_BETA is the string \"true\". With the current .env value of false, the built page does not contain the notice.",
+      "assertions": [
+        "The condition treats the variable as a string or declares it as a boolean with `astro:env`; it does not rely on the truthiness of `import.meta.env.PUBLIC_SHOW_BETA`.",
+        "With PUBLIC_SHOW_BETA=false the built home page does not contain the notice."
+      ],
+      "file_checks": [
+        {
+          "id": "flag-used",
+          "path": "src/**/*.astro",
+          "contains": [
+            "SHOW_BETA",
+            "This site is in beta\\."
+          ]
+        }
+      ],
+      "output_checks": [
+        {
+          "id": "notice-hidden-when-false",
+          "path": "index.html",
+          "not_contains": [
+            "This site is in beta"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "hero-image",
+      "fixture": "astro-site",
+      "should_trigger": true,
+      "prompt": "In this Astro project, add the image at src/assets/hero.png to the top of the home page, above the post header, with the alt text \"Abstract purple banner\".",
+      "expected_output": "The built home page has an <img> with the alt text whose src points at a processed asset under /_astro/, and that asset exists in the build output.",
+      "assertions": [
+        "The image is imported from `src/assets/` and rendered with `<Image />` from `astro:assets` or an `<img>` using the import's `src`.",
+        "The built page does not reference `/src/assets/hero.png`.",
+        "The image has the requested alt text."
+      ],
+      "output_checks": [
+        {
+          "id": "processed-src",
+          "path": "index.html",
+          "contains": [
+            "<img[^>]+src=\"/_astro/hero\\.[^\"]+\"",
+            "alt=\"Abstract purple banner\""
+          ],
+          "not_contains": [
+            "src=\"/?src/assets/"
+          ]
+        },
+        {
+          "id": "asset-emitted",
+          "path": "_astro/hero.*"
+        }
+      ]
+    },
+    {
+      "id": "menu-after-navigation",
+      "fixture": "astro-site",
+      "should_trigger": true,
+      "prompt": "In this Astro project, the Menu button in the header opens the navigation on the first page load, but stops working after following a link to another page. Fix it without removing the page transitions.",
+      "expected_output": "The menu toggle is set up again after each client-side navigation, and the client router is still enabled.",
+      "assertions": [
+        "The toggle setup runs on the `astro:page-load` event, or uses another approach that survives client-side navigation such as a delegated listener on `document`.",
+        "`<ClientRouter />` is still rendered in the layout."
+      ],
+      "build_check": true,
+      "file_checks": [
+        {
+          "id": "survives-navigation",
+          "path": "src/**/*.astro",
+          "contains": [
+            "astro:page-load|astro:after-swap|data-astro-rerun|transition:persist|document\\.addEventListener\\(\\s*['\"]click['\"]"
+          ]
+        },
+        {
+          "id": "client-router-kept",
+          "path": "src/layouts/Layout.astro",
+          "contains": [
+            "<ClientRouter"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "route-cache",
+      "fixture": "astro-server",
+      "should_trigger": true,
+      "prompt": "In this Astro project, the product pages at /products/[id] are rendered on demand. Cache their responses for 10 minutes, keep serving a stale response for up to 1 more minute while it is refreshed, and tag them \"products\" so they can be invalidated together. Use Astro's built-in route caching with the in-memory provider.",
+      "expected_output": "Route caching is enabled with the in-memory provider at the top level of the Astro config, and product pages are cached for 600 seconds with 60 seconds of stale-while-revalidate and the tag products. The project builds.",
+      "assertions": [
+        "The Astro config sets `cache: { provider: memoryCache() }` at the top level, not under `experimental`.",
+        "Product pages are cached with `maxAge: 600`, `swr: 60` and the tag `products`, through `Astro.cache.set()` in the page or `routeRules` in the config."
+      ],
+      "build_check": true,
+      "file_checks": [
+        {
+          "id": "provider-configured",
+          "path": "astro.config.*",
+          "contains": [
+            "memoryCache\\(",
+            "cache\\s*:"
+          ],
+          "not_contains": [
+            "experimental"
+          ]
+        },
+        {
+          "id": "cache-policy",
+          "any_of": [
+            {
+              "path": "src/pages/products/*.astro",
+              "contains": [
+                "Astro\\.cache\\.set\\(",
+                "maxAge\\s*:\\s*600",
+                "swr\\s*:\\s*60",
+                "products"
+              ]
+            },
+            {
+              "path": "astro.config.*",
+              "contains": [
+                "routeRules",
+                "maxAge\\s*:\\s*600",
+                "swr\\s*:\\s*60",
+                "tags"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "session-counter",
+      "fixture": "astro-server",
+      "should_trigger": true,
+      "prompt": "In this Astro project, add a page at /visits that shows how many times the current visitor has loaded it. Keep the count in server-side session storage, not in a cookie value or in the browser.",
+      "expected_output": "A /visits page rendered on demand reads the visitor's count from the Astro session, increments it, stores it and displays it. The project builds.",
+      "assertions": [
+        "The page is rendered on demand.",
+        "The count is read with an awaited `Astro.session.get()` and stored with `Astro.session.set()`.",
+        "No session driver is configured by hand; the Node adapter provides one."
+      ],
+      "build_check": true,
+      "file_checks": [
+        {
+          "id": "session-read",
+          "path": "src/pages/visits.astro",
+          "contains": [
+            "await\\s+Astro\\.session\\??\\.get\\("
+          ]
+        },
+        {
+          "id": "session-write",
+          "path": "src/pages/visits.astro",
+          "contains": [
+            "Astro\\.session\\??\\.set\\("
+          ]
+        },
+        {
+          "id": "rendered-on-demand",
+          "any_of": [
+            {
+              "path": "src/pages/visits.astro",
+              "contains": [
+                "prerender\\s*=\\s*false"
+              ]
+            },
+            {
+              "path": "astro.config.*",
+              "contains": [
+                "output\\s*:\\s*['\"]server['\"]"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "react-island",
+      "fixture": "astro-react",
+      "should_trigger": true,
+      "prompt": "In this Astro project, add the Counter component from src/components/Counter.jsx to the home page, below the paragraph, so visitors can use it.",
+      "expected_output": "The home page renders the Counter component as a hydrated island, so its buttons work in the browser.",
+      "assertions": [
+        "The Counter is rendered with a `client:*` directive.",
+        "The built home page contains an island for the component."
+      ],
+      "file_checks": [
+        {
+          "id": "client-directive",
+          "path": "src/pages/index.astro",
+          "contains": [
+            "<Counter[^>]*\\sclient:(load|idle|visible|media|only)"
+          ]
+        }
+      ],
+      "output_checks": [
+        {
+          "id": "island-emitted",
+          "path": "index.html",
+          "contains": [
+            "<astro-island"
           ]
         }
       ]

@@ -1,0 +1,46 @@
+---
+import { ClientRouter } from 'astro:transitions';
+
+interface Props {
+  title: string;
+}
+
+const { title } = Astro.props;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <title>{title}</title>
+    <ClientRouter />
+  </head>
+  <body>
+    <header>
+      <button class="menu-toggle" aria-expanded="false" aria-controls="site-nav">Menu</button>
+      <nav id="site-nav" hidden>
+        <a href="/">Home</a>
+        <a href="/about/">About</a>
+      </nav>
+    </header>
+    <main>
+      <slot />
+    </main>
+
+    <script>
+      // With the client router, this script runs once. Set the menu up again
+      // after every navigation.
+      document.addEventListener('astro:page-load', () => {
+        const toggle = document.querySelector('.menu-toggle');
+        const nav = document.querySelector('#site-nav');
+
+        toggle?.addEventListener('click', () => {
+          const open = toggle.getAttribute('aria-expanded') === 'true';
+          toggle.setAttribute('aria-expanded', String(!open));
+          nav?.toggleAttribute('hidden', open);
+        });
+      });
+    </script>
+  </body>
+</html>

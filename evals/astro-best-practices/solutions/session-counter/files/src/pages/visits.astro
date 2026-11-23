@@ -1,0 +1,17 @@
+---
+export const prerender = false;
+
+const visits = ((await Astro.session?.get('visits')) ?? 0) + 1;
+Astro.session?.set('visits', visits);
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Visits</title>
+  </head>
+  <body>
+    <h1>Visits</h1>
+    <p>You have loaded this page {visits} times.</p>
+  </body>
+</html>
