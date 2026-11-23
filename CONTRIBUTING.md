@@ -143,7 +143,7 @@ Live evaluations run on your machine with your own provider keys. Put the keys y
 
 Matrix entries whose key is missing are skipped, so one key is enough to start. Harbor also reads `.env.local` itself and uses the key that matches the model's provider.
 
-Live runs cost money and take time. A trial takes a few minutes. A full matrix is 31 cases, six entries, two arms and three attempts: about 1,100 trials. Start small.
+Live runs cost money and take time. A trial takes a few minutes. A full matrix is 31 cases, eight entries, two arms and three attempts: about 1,500 trials. Start small.
 
 ```sh
 # Check everything without calling a model
@@ -184,6 +184,8 @@ The runner generates one Harbor task per case into `.eval-tasks/`, writes a job 
 | `codex-sol` | Codex | `openai/gpt-6.2-sol` | high | frontier |
 | `opencode-gemini-hydrogen` | OpenCode | `openrouter/google/gemini-4-hydrogen` | default | small |
 | `opencode-gemini-neon` | OpenCode | `openrouter/google/gemini-4-neon` | default | frontier |
+| `opencode-hy4-flash` | OpenCode | `openrouter/tencent/hy4-flash` | default | small |
+| `opencode-deepseek-flash` | OpenCode | `openrouter/deepseek/deepseek-v4.1-flash-1017` | default | small |
 
 To change it, edit `entries`:
 
