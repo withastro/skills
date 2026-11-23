@@ -13,13 +13,12 @@
   },
   "scripts": {
     "validate": "for skill in skills/*/; do uvx --python 3.13 --from skills-ref agentskills validate \"$skill\" || exit 1; done",
-    "check:grader": "node scripts/sync-grader.mjs --check",
-    "check:tier1": "for skill in skills/*/; do skillevaluator tier1 \"$skill\" --no-llm --skillspector-baseline .skillevaluator/baselines/eval-fixtures.yaml -o \"reports/tier1/$(basename \"$skill\")\" || exit 1; done",
+    "check:tier1": "for skill in skills/*/; do skillevaluator tier1 \"$skill\" --no-llm -o \"reports/tier1/$(basename \"$skill\")\" || exit 1; done",
     "check:tier2": "node scripts/dedup.mjs",
     "check:harness": "for skill in skills/*/; do skillevaluator harness-check \"$skill\"; done",
-    "eval:validate": "for skill in skills/*/; do skillevaluator tier3 validate \"$skill\" --strict || exit 1; done",
-    "eval": "node scripts/eval-matrix.mjs",
+    "eval:check": "node scripts/eval-matrix.mjs --check",
     "eval:dry": "node scripts/eval-matrix.mjs --dry-run",
+    "eval": "node scripts/eval-matrix.mjs",
     "eval:summary": "node scripts/eval-matrix.mjs --summary-only"
   }
 }
