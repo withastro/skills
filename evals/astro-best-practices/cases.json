@@ -1,22 +1,19 @@
 {
   "skill_name": "astro-best-practices",
-  "evals": [
+  "cases": [
     {
       "id": "content-collection-new",
-      "prompt": "In the Astro project at input/astro-basic, turn the Markdown files in src/data/blog into a blog. Define a content collection for them with a schema for title, pubDate and an optional draft flag, and add a page at /blog/<post id>/ that renders each post that is not a draft.",
+      "prompt": "In this Astro project, turn the Markdown files in src/data/blog into a blog. Define a content collection for them with a schema for title, pubDate and an optional draft flag, and add a page at /blog/<post id>/ that renders each post that is not a draft.",
+      "fixture": "astro-basic",
+      "should_trigger": true,
       "expected_output": "A content collection named for the blog posts is defined with a loader and a schema, and a dynamic route under src/pages/blog renders each non-draft post. The project builds with Astro 7.",
-      "expected_skill": "astro-best-practices",
-      "files": [
-        "files/astro-basic"
-      ],
-      "project": "astro-basic",
-      "build_check": true,
       "assertions": [
         "The collection is defined in `src/content.config.ts` with a `loader` that reads `src/data/blog`.",
         "The schema validates title, pubDate and an optional draft field.",
         "The blog route renders post bodies with the `render()` function from `astro:content`.",
         "Draft posts do not get a page."
       ],
+      "build_check": true,
       "file_checks": [
         {
           "id": "config-location",
@@ -53,20 +50,17 @@
     },
     {
       "id": "legacy-project-upgrade",
-      "prompt": "The Astro project at input/astro-legacy was written for Astro 4. The astro dependency in package.json has just been bumped to Astro 7 and the site no longer builds. Update the code so it builds on Astro 7. Keep the same pages and URLs.",
+      "prompt": "This Astro project was written for Astro 4. The astro dependency in package.json has just been bumped to Astro 7 and the site no longer builds. Update the code so it builds on Astro 7. Keep the same pages and URLs.",
+      "fixture": "astro-legacy",
+      "should_trigger": true,
       "expected_output": "The project builds on Astro 7 with the home page and one page per blog post at the same URLs as before. Removed Astro APIs are replaced with their current equivalents.",
-      "expected_skill": "astro-best-practices",
-      "files": [
-        "files/astro-legacy"
-      ],
-      "project": "astro-legacy",
-      "build_check": true,
       "assertions": [
         "The content collection config is at `src/content.config.ts` and the blog collection has a `loader`.",
         "No code uses `Astro.glob`, `entry.render()`, `entry.slug`, `<ViewTransitions />` or `output: 'hybrid'`.",
         "The unclosed `<h1>` in the blog post page is closed.",
         "Blog posts are still served at /blog/hello-world/ and /blog/second-post/."
       ],
+      "build_check": true,
       "file_checks": [
         {
           "id": "config-location",
@@ -123,20 +117,17 @@
     },
     {
       "id": "on-demand-endpoint",
-      "prompt": "In the Astro project at input/astro-basic, add an endpoint at /api/time.json that returns the current server time as JSON, computed on every request. Every other page must stay statically generated. The site will be deployed as a standalone Node server.",
+      "prompt": "In this Astro project, add an endpoint at /api/time.json that returns the current server time as JSON, computed on every request. Every other page must stay statically generated. The site will be deployed as a standalone Node server.",
+      "fixture": "astro-basic",
+      "should_trigger": true,
       "expected_output": "A /api/time.json endpoint renders on demand and returns the current time as JSON, the Node adapter is configured, and the existing pages are still prerendered.",
-      "expected_skill": "astro-best-practices",
-      "files": [
-        "files/astro-basic"
-      ],
-      "project": "astro-basic",
-      "build_check": true,
       "assertions": [
         "The endpoint is rendered on demand, not prerendered at build time.",
         "The existing pages remain prerendered.",
         "An adapter for Node is installed and set in the Astro config.",
         "The config does not use `output: 'hybrid'`."
       ],
+      "build_check": true,
       "file_checks": [
         {
           "id": "endpoint-exists",
@@ -168,19 +159,16 @@
     },
     {
       "id": "remark-plugin",
-      "prompt": "In the Astro project at input/astro-basic, add the remark-toc plugin so that the `## Contents` heading in src/pages/guide.md is followed by a generated table of contents in the built page.",
+      "prompt": "In this Astro project, add the remark-toc plugin so that the `## Contents` heading in src/pages/guide.md is followed by a generated table of contents in the built page.",
+      "fixture": "astro-basic",
+      "should_trigger": true,
       "expected_output": "remark-toc is installed and registered so that the built guide page contains a generated list of links under the Contents heading.",
-      "expected_skill": "astro-best-practices",
-      "files": [
-        "files/astro-basic"
-      ],
-      "project": "astro-basic",
-      "build_check": true,
       "assertions": [
         "`remark-toc` is added to the project's dependencies.",
         "`@astrojs/markdown-remark` is added to the project's dependencies, because Astro 7 no longer includes the remark pipeline by default.",
         "The Astro config registers remark-toc through a Markdown processor configuration that runs remark plugins."
       ],
+      "build_check": true,
       "file_checks": [
         {
           "id": "plugin-installed",
@@ -207,20 +195,17 @@
     },
     {
       "id": "action-form",
-      "prompt": "In the Astro project at input/astro-basic, add a newsletter sign-up form to the home page. Implement the submission as an Astro action that validates the email address and returns a success message. The form must work without client-side JavaScript. The site will be deployed as a standalone Node server.",
+      "prompt": "In this Astro project, add a newsletter sign-up form to the home page. Implement the submission as an Astro action that validates the email address and returns a success message. The form must work without client-side JavaScript. The site will be deployed as a standalone Node server.",
+      "fixture": "astro-basic",
+      "should_trigger": true,
       "expected_output": "An action validates the submitted email, the home page has a form that posts to it and shows the result, and the project is configured to render that page on demand with the Node adapter.",
-      "expected_skill": "astro-best-practices",
-      "files": [
-        "files/astro-basic"
-      ],
-      "project": "astro-basic",
-      "build_check": true,
       "assertions": [
         "The action is exported from the `server` object in `src/actions/index.ts` and accepts form data.",
         "The email is validated with a schema that uses `z` imported from `astro/zod`.",
         "The home page form uses `method=\"POST\"` with the action as its `action` attribute and reads the result on the server.",
         "The home page is rendered on demand and an adapter is configured."
       ],
+      "build_check": true,
       "file_checks": [
         {
           "id": "action-defined",
@@ -256,20 +241,17 @@
     },
     {
       "id": "tailwind-setup",
-      "prompt": "Add Tailwind CSS to the Astro project at input/astro-basic and use utility classes to make the home page heading large and bold.",
+      "prompt": "Add Tailwind CSS to this Astro project and use utility classes to make the home page heading large and bold.",
+      "fixture": "astro-basic",
+      "should_trigger": true,
       "expected_output": "Tailwind CSS 4 is set up through its Vite plugin with a global stylesheet imported by the layout, and the home page heading uses Tailwind utility classes.",
-      "expected_skill": "astro-best-practices",
-      "files": [
-        "files/astro-basic"
-      ],
-      "project": "astro-basic",
-      "build_check": true,
       "assertions": [
         "Tailwind is added through `@tailwindcss/vite` in the Vite plugins of the Astro config.",
         "The legacy `@astrojs/tailwind` integration is not used.",
         "A stylesheet contains `@import \"tailwindcss\"` and is imported so it applies to the home page.",
         "The home page heading has utility classes for size and weight."
       ],
+      "build_check": true,
       "file_checks": [
         {
           "id": "vite-plugin-installed",
@@ -302,18 +284,15 @@
     },
     {
       "id": "client-router",
-      "prompt": "Enable Astro's client-side router with animated page transitions for every page of the Astro project at input/astro-basic.",
+      "prompt": "Enable Astro's client-side router with animated page transitions for every page of this Astro project.",
+      "fixture": "astro-basic",
+      "should_trigger": true,
       "expected_output": "The shared layout enables Astro's client router so navigation between pages is animated.",
-      "expected_skill": "astro-best-practices",
-      "files": [
-        "files/astro-basic"
-      ],
-      "project": "astro-basic",
-      "build_check": true,
       "assertions": [
         "The shared layout renders `<ClientRouter />` imported from `astro:transitions` inside `<head>`.",
         "The removed `<ViewTransitions />` component is not used."
       ],
+      "build_check": true,
       "file_checks": [
         {
           "id": "client-router",
@@ -330,14 +309,10 @@
     },
     {
       "id": "typed-env",
-      "prompt": "In the Astro project at input/astro-basic, the home page should show a site announcement read from an ANNOUNCEMENT environment variable, and server code will need an API_SECRET variable. Declare both with Astro's built-in type-safe environment variable support so they are validated, with ANNOUNCEMENT optional and public and API_SECRET kept out of client bundles, and show the announcement on the home page when it is set.",
+      "prompt": "In this Astro project, the home page should show a site announcement read from an ANNOUNCEMENT environment variable, and server code will need an API_SECRET variable. Declare both with Astro's built-in type-safe environment variable support so they are validated, with ANNOUNCEMENT optional and public and API_SECRET kept out of client bundles, and show the announcement on the home page when it is set.",
+      "fixture": "astro-basic",
+      "should_trigger": true,
       "expected_output": "Both variables are declared in an env schema in the Astro config, the home page reads ANNOUNCEMENT through Astro's typed env module and renders it when set, and API_SECRET is declared as a server-only secret.",
-      "expected_skill": "astro-best-practices",
-      "files": [
-        "files/astro-basic"
-      ],
-      "project": "astro-basic",
-      "build_check": false,
       "assertions": [
         "The Astro config declares `env.schema` with `envField` entries for ANNOUNCEMENT and API_SECRET.",
         "API_SECRET is declared with server context and secret access.",
@@ -369,28 +344,32 @@
     },
     {
       "id": "negative-word-count",
-      "prompt": "Count how many times each word appears in input/notes/word-list.txt and report the counts sorted from most to least frequent.",
-      "expected_output": "apple appears 3 times, banana 2 times and cherry once, listed in that order.",
-      "expected_skill": null,
+      "prompt": "Count how many times each word appears in word-list.txt and write the counts to counts.txt, one \"word count\" pair per line, sorted from most to least frequent.",
+      "fixture": "notes",
       "should_trigger": false,
-      "files": [
-        "files/notes"
-      ],
+      "expected_output": "counts.txt lists apple 3, banana 2 and cherry 1, in that order.",
       "assertions": [
-        "The response reports apple: 3, banana: 2, cherry: 1.",
+        "counts.txt reports apple 3, banana 2, cherry 1.",
         "The counts are listed from most to least frequent."
+      ],
+      "file_checks": [
+        {
+          "id": "counts-file",
+          "path": "counts.txt",
+          "contains": [
+            "apple\\D*3",
+            "banana\\D*2",
+            "cherry\\D*1"
+          ]
+        }
       ]
     },
     {
       "id": "negative-vite-react",
-      "prompt": "In the Vite and React project at input/vite-react, add a Counter component with increment and decrement buttons and render it in App.",
-      "expected_output": "A Counter React component with working increment and decrement buttons exists and App renders it. The project remains a plain Vite and React app.",
-      "expected_skill": null,
+      "prompt": "In this Vite and React project, add a Counter component with increment and decrement buttons and render it in App.",
+      "fixture": "vite-react",
       "should_trigger": false,
-      "files": [
-        "files/vite-react"
-      ],
-      "project": "vite-react",
+      "expected_output": "A Counter React component with working increment and decrement buttons exists and App renders it. The project remains a plain Vite and React app.",
       "assertions": [
         "A Counter component keeps its count in React state and has increment and decrement buttons.",
         "App renders the Counter component.",
