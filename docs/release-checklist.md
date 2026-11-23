@@ -12,7 +12,7 @@ Steps for releasing a new version of a skill. Adapted from NVIDIA's [agent skill
 
 ## Scanning and evaluation
 
-- [ ] `pnpm validate` and `pnpm eval:check` pass.
+- [ ] `pnpm validate`, `pnpm eval:check` and `pnpm eval:verify` pass.
 - [ ] The skill directory contains only `SKILL.md`, `references/` and `skill-card.md`.
 - [ ] The Skill checks workflow (SkillEvaluator Tier 1) passes on the release commit. Download its report artifact.
 - [ ] No critical or high finding is open. Medium findings in `SKILL.md` and `references/` are reviewed and either fixed or noted in the pull request.

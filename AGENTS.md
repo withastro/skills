@@ -17,6 +17,7 @@ evals/
   Dockerfile          trial image
   <name>/cases.json   eval cases for a skill
   <name>/fixtures/    small projects the cases start from
+  <name>/solutions/   reference solution per case, used to verify the case
 scripts/
   eval-matrix.mjs     live evals with Harbor (local only)
   dedup.mjs           SkillEvaluator Tier 2 (local only)
@@ -34,7 +35,7 @@ Generated and ignored: `.eval-tasks/` (Harbor tasks), `.eval-results/` (run resu
 - Keep `SKILL.md` under about 150 lines. Critical rules and the outdated-patterns table stay in `SKILL.md`; detail goes in `references/`.
 - State facts and give the reason. Avoid "ALWAYS" and "NEVER" in capitals, required step sequences for small edits, and templates with hard-coded paths the agent might copy over a project's own layout.
 - Frontmatter uses `name`, `description`, `license` and `metadata` only. Keep `description` under 1,024 characters and write lists in block style.
-- When a claim changes, update the eval case that covers it in `evals/<name>/cases.json`, or add one.
+- When a claim changes, update the eval case that covers it in `evals/<name>/cases.json`, or add one. A new case needs a reference solution, and `pnpm eval:verify` must pass for it.
 - A change to `SKILL.md` or `references/` that changes behaviour needs a `metadata.version` bump in the skill and, for the plugin, in `.claude-plugin/plugin.json`.
 
 ## Commands
@@ -42,6 +43,7 @@ Generated and ignored: `.eval-tasks/` (Harbor tasks), `.eval-results/` (run resu
 ```sh
 pnpm validate         # Agent Skills specification
 pnpm eval:check       # eval cases, fixtures and matrix
+pnpm eval:verify      # reference solutions score 1.0, untouched fixtures do not (Docker, no model calls)
 pnpm check:tier1      # SkillEvaluator Tier 1 (needs skillevaluator and gitleaks installed)
 pnpm check:tier2      # SkillEvaluator Tier 2 deduplication (calls a model provider)
 pnpm eval:dry         # generate Harbor tasks and validate each job; no model calls

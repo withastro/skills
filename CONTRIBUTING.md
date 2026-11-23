@@ -42,6 +42,7 @@ No `npm install` is needed; the scripts have no dependencies. Every `pnpm <scrip
 | --- | --- | --- |
 | `pnpm validate` | Validates each skill against the Agent Skills specification | uv |
 | `pnpm eval:check` | Validates the eval cases, fixtures and model matrix | Node.js |
+| `pnpm eval:verify` | Runs each case's reference solution in a container: it must score 1.0, and the untouched fixture must not | Harbor, Docker |
 | `pnpm check:harness` | Shows whether Claude Code, Codex, OpenCode and other harnesses load each skill | SkillEvaluator |
 | `pnpm check:tier1` | Quality score and security scan (SkillSpector, Gitleaks, Bandit); reports go to `reports/tier1/` | SkillEvaluator, Gitleaks |
 | `pnpm check:tier2` | Repeated content inside a skill and overlap between skills | SkillEvaluator, a provider key |
@@ -79,36 +80,56 @@ Each skill has eval cases in `evals/<name>/cases.json`. A case has a prompt, a f
 
 Scoring is deterministic. `evals/grader.py` runs inside the container after the agent finishes and reports:
 
-- `file_checks`: the share of the case's file checks that hold (regular expressions that must or must not match in the edited project);
-- `astro_build`: whether `astro build` succeeds, for cases with `build_check`.
+- `file_checks`: the share of the case's file checks that hold in the edited project;
+- `astro_build`: whether `astro build` succeeds;
+- `output_checks`: the share of the case's checks that hold in the build output (`dist/`).
 
 No language model judges the output. `expected_output` and `assertions` in a case describe the intended result for people reading the dataset; they are not scored.
+
+### What makes a useful case
+
+A case earns its place when a capable model gets it wrong without the skill. Current models fix most build errors by themselves, because the error message names the fix. The cases that separate the arms are the ones where the mistake builds cleanly:
+
+- output that is wrong but valid, such as a missing space between inline elements or a banner shown when a flag is `false`;
+- a deprecated or removed API that still appears to work;
+- an API newer than the model's training data.
+
+Prefer `output_checks` on the built site for these: they test what the user would see, and any correct implementation passes.
 
 ### Writing a case
 
 ```json
 {
-  "id": "client-router",
-  "prompt": "Enable Astro's client-side router with animated page transitions for every page of this Astro project.",
-  "fixture": "astro-basic",
+  "id": "env-flag",
+  "prompt": "In this Astro project, show a paragraph with the text \"This site is in beta.\" at the top of the home page, but only when the PUBLIC_SHOW_BETA environment variable is set to true. The .env file currently sets it to false.",
+  "fixture": "astro-site",
   "should_trigger": true,
-  "expected_output": "The shared layout enables Astro's client router so navigation between pages is animated.",
-  "assertions": ["The shared layout renders `<ClientRouter />` imported from `astro:transitions` inside `<head>`."],
-  "build_check": true,
+  "expected_output": "With the current .env value of false, the built page does not contain the notice.",
+  "assertions": ["The condition does not rely on the truthiness of `import.meta.env.PUBLIC_SHOW_BETA`."],
   "file_checks": [
-    { "id": "client-router", "path": "src/layouts/Layout.astro", "contains": ["<ClientRouter"], "not_contains": ["ViewTransitions"] }
+    { "id": "flag-used", "path": "src/**/*.astro", "contains": ["SHOW_BETA", "This site is in beta\\."] }
+  ],
+  "output_checks": [
+    { "id": "notice-hidden-when-false", "path": "index.html", "not_contains": ["This site is in beta"] }
   ]
 }
 ```
 
 - Write the prompt the way a user would. Do not name the skill or hint at the answer; both arms get the same prompt, and the baseline must be able to succeed.
 - `fixture` is a directory in `evals/<name>/fixtures/`. It becomes the agent's working directory, with dependencies installed and a git repository initialised.
-- `file_checks` entries take `path` (a file or glob inside the project), and any of `exists: false`, `contains` and `not_contains` (lists of regular expressions). Check for what must be true of any correct solution; do not fail a valid alternative.
-- Set `build_check` to `true` when the project should build afterwards.
+- A check takes `path` (a file or glob) and any of `exists: false`, `contains` and `not_contains` (lists of regular expressions). `{ "any_of": [check, check] }` passes when one of its checks does; use it when there are several correct implementations.
+- `file_checks` paths are relative to the project; `output_checks` paths are relative to `dist/` and imply a build. Set `build_check: true` to require a passing build without output checks.
+- Check for what must be true of any correct solution. Do not fail a valid alternative.
 - Set `should_trigger` to `false` for cases where the skill should not be used: an unrelated task and a near miss. Each skill needs at least one.
-- Before adding a fixture, build it yourself against the current release, both in its starting state and with a correct solution applied.
 
-Run `pnpm eval:check` after editing.
+Every case needs a reference solution in `evals/<name>/solutions/<case-id>/`: a `files/` directory that is copied over the fixture, and optionally `delete.txt` listing paths to remove first. Then run:
+
+```sh
+pnpm eval:check                                 # schema and fixtures
+node scripts/eval-matrix.mjs --verify --case env-flag
+```
+
+`--verify` runs the case twice in a container with no model involved: once with the solution applied, which must score 1.0 on every metric, and once with the fixture untouched, which must score less. A case that fails either way is wrong: its checks reject a correct answer, or they pass without any work.
 
 ### Running live evaluations
 
