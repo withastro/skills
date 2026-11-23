@@ -263,7 +263,7 @@
       "assertions": [
         "Tailwind is added through `@tailwindcss/vite` in the Vite plugins of the Astro config.",
         "The legacy `@astrojs/tailwind` integration is not used.",
-        "A stylesheet contains `@import \"tailwindcss\"` and is imported so it applies to the home page.",
+        "A stylesheet imports Tailwind (`@import \"tailwindcss\"` or its layered `tailwindcss/*.css` entries) and is loaded so it applies to the home page.",
         "The home page heading has utility classes for size and weight."
       ],
       "build_check": true,
@@ -292,7 +292,7 @@
           "id": "stylesheet-import",
           "path": "src/**/*.css",
           "contains": [
-            "@import\\s+[\"']tailwindcss[\"']"
+            "@import\\s+[\"']tailwindcss(/[\\w.-]+)?[\"']"
           ]
         }
       ]
