@@ -1,4 +1,0 @@
-version: 1
-baselines:
-  skills/astro-best-practices: .skillevaluator/baselines/eval-fixtures.yaml
-  skills/starlight-best-practices: .skillevaluator/baselines/eval-fixtures.yaml

@@ -20,9 +20,7 @@ jobs:
       image: ghcr.io/nvidia/skillevaluator-tier1@sha256:fbff256df8f760019539d442b7cb533d7ec50efab37f4482b7b670e2e4b4189a
       paths: skills
       min-score: 70
-      # Applies the reviewed exceptions in .skillevaluator/skillspector-baselines.yaml.
-      # Pull requests read the manifest and baselines from the target branch, so a
-      # change to them only takes effect after it is merged.
-      security-baselines: true
+      # Enable only after the reviewed baseline manifest reaches the target branch.
+      security-baselines: false
       scan-mode: auto
       llm: false
