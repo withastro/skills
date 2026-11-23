@@ -1,6 +1,6 @@
 // Shared helpers for the local evaluation scripts: repository root, loading
-// provider keys from .env.local, and building a child environment that holds
-// only the provider settings a run needs.
+// provider keys from .env.local, and building a child environment with one
+// set of provider settings.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -8,8 +8,9 @@ import { fileURLToPath } from 'node:url';
 
 export const root = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
-// Provider credentials and endpoint settings. Each run is given only the ones
-// its route needs, so a maintainer's other keys never reach an unrelated run.
+// Provider credentials and endpoint settings, cleared from a child environment
+// before the settings for one run are applied. Harbor also reads .env.local
+// itself and picks the key that matches the model's provider.
 const PROVIDER_VARIABLES = [
   'ANTHROPIC_API_KEY',
   'ANTHROPIC_BASE_URL',

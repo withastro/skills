@@ -1,32 +1,14 @@
 {
-  "$comment": "Harness x model matrix for scripts/eval-matrix.mjs. Each entry is one `skillevaluator tier3 evaluate` run with both arms (with and without the skill). Edit this list to change the models. `route` selects how the run reaches the model and which key it needs (see `routes`). `model` is the ID the agent is given; `judgeModel` grades the judged dimensions and is fixed per route so the small and frontier rows of a harness are judged alike.",
-  "envMode": "docker",
+  "$comment": "Harness x model matrix for scripts/eval-matrix.mjs (Harbor). Each entry is run twice per case: once with the skill installed and once without. Edit `entries` to change models or effort. `model` is a Harbor model name: `anthropic/<id>`, `openai/<id>`, or `openrouter/<provider>/<id>` for any model on OpenRouter. `effort` is the reasoning effort for the agent (claude-code: low, medium, high, xhigh, max; codex: none, minimal, low, medium, high, xhigh, max; opencode: a variant name the model defines); null leaves the agent's default. `key` is the environment variable holding the API key. Optional `version` pins the agent CLI version.",
   "attempts": 3,
+  "concurrency": 4,
   "regressionTolerance": 0.05,
-  "routes": {
-    "anthropic": {
-      "provider": "anthropic",
-      "key": "ANTHROPIC_API_KEY",
-      "judgeModel": "claude-opus-5-5"
-    },
-    "openai": {
-      "provider": "openai",
-      "key": "OPENAI_API_KEY",
-      "judgeModel": "gpt-6.2-sol"
-    },
-    "openrouter": {
-      "provider": "openai-compatible",
-      "key": "OPENROUTER_API_KEY",
-      "baseUrl": "https://openrouter.ai/api/v1",
-      "judgeModel": "anthropic/claude-opus-5.5"
-    }
-  },
   "entries": [
-    { "id": "claude-code-haiku", "agent": "claude-code", "route": "anthropic", "model": "claude-haiku-5-5", "tier": "small" },
-    { "id": "claude-code-opus", "agent": "claude-code", "route": "anthropic", "model": "claude-opus-5-5", "tier": "frontier" },
-    { "id": "codex-luna", "agent": "codex", "route": "openai", "model": "gpt-6-luna", "tier": "small" },
-    { "id": "codex-sol", "agent": "codex", "route": "openai", "model": "gpt-6.2-sol", "tier": "frontier" },
-    { "id": "opencode-gemini-hydrogen", "agent": "opencode", "route": "openrouter", "model": "google/gemini-4-hydrogen", "tier": "small" },
-    { "id": "opencode-gemini-neon", "agent": "opencode", "route": "openrouter", "model": "google/gemini-4-neon", "tier": "frontier" }
+    { "id": "claude-code-haiku", "agent": "claude-code", "model": "anthropic/claude-haiku-5-5", "effort": "medium", "tier": "small", "key": "ANTHROPIC_API_KEY" },
+    { "id": "claude-code-opus", "agent": "claude-code", "model": "anthropic/claude-opus-5-5", "effort": "high", "tier": "frontier", "key": "ANTHROPIC_API_KEY" },
+    { "id": "codex-luna", "agent": "codex", "model": "openai/gpt-6-luna", "effort": "medium", "tier": "small", "key": "OPENAI_API_KEY" },
+    { "id": "codex-sol", "agent": "codex", "model": "openai/gpt-6.2-sol", "effort": "high", "tier": "frontier", "key": "OPENAI_API_KEY" },
+    { "id": "opencode-gemini-hydrogen", "agent": "opencode", "model": "openrouter/google/gemini-4-hydrogen", "effort": null, "tier": "small", "key": "OPENROUTER_API_KEY" },
+    { "id": "opencode-gemini-neon", "agent": "opencode", "model": "openrouter/google/gemini-4-neon", "effort": null, "tier": "frontier", "key": "OPENROUTER_API_KEY" }
   ]
 }

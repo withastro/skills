@@ -4,7 +4,6 @@ node_modules/
 
 # Evaluation output (never committed)
 reports/
-skills/*/evals/results/
 .eval-runs/
 
 # Python tooling
@@ -18,3 +17,7 @@ __pycache__/
 .env
 .env.*
 !.env.example
+
+# Generated Harbor tasks and results
+.eval-tasks/
+.eval-results/

@@ -1,7 +1,10 @@
 #!/usr/bin/env node
-// Runs the live evaluation (NVIDIA SkillEvaluator Tier 3) for each skill across
-// the harness x model matrix in evals/matrix.json, then prints the skill's
-// measured effect per model: with-skill score minus without-skill score.
+// Live evaluation with Harbor (https://github.com/harbor-framework/harbor).
+//
+// For each skill and each entry of evals/matrix.json (an agent harness, a
+// model and a reasoning effort), every eval case is run in a fresh container
+// twice: once with the skill installed and once without. The deterministic
+// grader scores both, and this script prints the difference.
 //
 // This is a local tool. Each maintainer uses their own provider keys, read
 // from the shell environment or from a gitignored `.env.local` file in the
@@ -11,65 +14,33 @@
 //   node scripts/eval-matrix.mjs [options]
 //
 // Options:
-//   --skill <name>       Skill directory name under skills/ (default: all skills)
+//   --skill <name>       Skill to evaluate (default: every skill with cases)
 //   --only <id,id>       Run only these matrix entry ids
-//   --attempts <n>       Attempts per case (default: matrix.json `attempts`)
+//   --case <id,id>       Run only these case ids
 //   --max-cases <n>      Run only the first n cases (smoke run; not release evidence)
-//   --env-mode <mode>    docker (default) or local
-//   --dry-run            Print the commands without running them
-//   --summary-only       Skip running; summarise results already in .eval-runs/
+//   --attempts <n>       Attempts per case and arm (default: matrix.json `attempts`)
+//   --concurrency <n>    Trials run at once (default: matrix.json `concurrency`)
+//   --check              Validate the datasets and matrix, then exit. No model calls
+//   --dry-run            Generate tasks and validate each job with Harbor. No model calls
+//   --summary-only       Skip running; summarise results already in .eval-results/
 //   --strict             Exit 1 when a frontier entry regresses beyond the tolerance
 //
-// Entries whose route key is not set are skipped and reported as such.
+// Entries whose key is not set are skipped and reported as such.
 // Live runs call model providers and cost money; see CONTRIBUTING.md.
 
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { basename, join, relative } from 'node:path';
 import { fail, loadLocalEnv, providerEnv, root } from './lib/env.mjs';
+import { buildTasks, listSkills, loadCases, validateSkill } from './lib/tasks.mjs';
 
-const runsDir = join(root, '.eval-runs');
+const resultsDir = join(root, '.eval-results');
 const matrix = JSON.parse(readFileSync(join(root, 'evals', 'matrix.json'), 'utf8'));
-
-// Reasoning effort is fixed by SkillEvaluator for each agent and cannot be
-// changed per run (as of SkillEvaluator 1.0.1). Shown in the summary so
-// results are read with it in mind.
-const AGENT_EFFORT = {
-  'claude-code': 'medium (fixed)',
-  codex: 'high (fixed)',
-  opencode: 'provider default',
-};
-
-function routeFor(entry) {
-  const route = matrix.routes[entry.route];
-  if (!route) fail(`Matrix entry ${entry.id} uses unknown route: ${entry.route}`);
-  return route;
-}
-
-// Environment and agent model argument for one entry.
-function runSettings(entry) {
-  const route = routeFor(entry);
-  const settings = {
-    SKILL_EVAL_LLM_PROVIDER: route.provider,
-    SKILL_EVAL_LLM_MODEL: entry.judgeModel ?? route.judgeModel,
-  };
-
-  let agentModel = entry.model;
-  if (route.provider === 'openai-compatible') {
-    // An OpenAI-compatible gateway such as OpenRouter: SkillEvaluator reads the
-    // shared URL and key, and OpenCode needs its `openai/` adapter prefix.
-    settings.SKILL_EVAL_LLM_BASE_URL = route.baseUrl;
-    settings.SKILL_EVAL_LLM_API_KEY = process.env[route.key] ?? '';
-    if (entry.agent === 'opencode') agentModel = `openai/${entry.model}`;
-  } else {
-    settings[route.key] = process.env[route.key] ?? '';
-  }
-  const env = providerEnv(settings);
-  return { route, env, agentModel };
-}
+const METRICS = ['file_checks', 'astro_build', 'reward'];
 
 function parseArgs(argv) {
-  const options = { dryRun: false, summaryOnly: false, strict: false };
+  const options = { check: false, dryRun: false, summaryOnly: false, strict: false };
+  const list = (value) => value.split(',').map((item) => item.trim()).filter(Boolean);
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     const value = () => {
@@ -78,10 +49,12 @@ function parseArgs(argv) {
       return next;
     };
     if (arg === '--skill') options.skill = value();
-    else if (arg === '--only') options.only = value().split(',').map((id) => id.trim());
-    else if (arg === '--attempts') options.attempts = Number(value());
+    else if (arg === '--only') options.only = list(value());
+    else if (arg === '--case') options.cases = list(value());
     else if (arg === '--max-cases') options.maxCases = Number(value());
-    else if (arg === '--env-mode') options.envMode = value();
+    else if (arg === '--attempts') options.attempts = Number(value());
+    else if (arg === '--concurrency') options.concurrency = Number(value());
+    else if (arg === '--check') options.check = true;
     else if (arg === '--dry-run') options.dryRun = true;
     else if (arg === '--summary-only') options.summaryOnly = true;
     else if (arg === '--strict') options.strict = true;
@@ -90,27 +63,81 @@ function parseArgs(argv) {
   return options;
 }
 
-function listSkills() {
-  const skillsDir = join(root, 'skills');
-  return readdirSync(skillsDir).filter((name) => existsSync(join(skillsDir, name, 'evals', 'evals.json')));
+function validateMatrix() {
+  const problems = [];
+  const ids = new Set();
+  for (const entry of matrix.entries ?? []) {
+    const where = `matrix entry ${entry.id ?? '(no id)'}`;
+    if (!entry.id || ids.has(entry.id)) problems.push(`${where}: id is missing or duplicated`);
+    ids.add(entry.id);
+    for (const field of ['agent', 'model', 'key']) {
+      if (typeof entry[field] !== 'string' || entry[field] === '') problems.push(`${where}: ${field} is required`);
+    }
+    if (!['small', 'frontier'].includes(entry.tier)) problems.push(`${where}: tier must be "small" or "frontier"`);
+    if (!('effort' in entry)) problems.push(`${where}: effort is required (use null for the agent's default)`);
+  }
+  if (ids.size === 0) problems.push('matrix has no entries');
+  return problems;
 }
 
-// Newest file with the given name anywhere under dir, or undefined.
-function findNewest(dir, fileName) {
-  if (!existsSync(dir)) return undefined;
-  let newest;
-  const visit = (current) => {
-    for (const name of readdirSync(current)) {
-      const path = join(current, name);
-      const stats = statSync(path);
-      if (stats.isDirectory()) visit(path);
-      else if (name === fileName && (!newest || stats.mtimeMs > newest.mtimeMs)) {
-        newest = { path, mtimeMs: stats.mtimeMs };
-      }
-    }
+// Case ids selected by --case and --max-cases, in dataset order.
+function selectCases(skill, options) {
+  let ids = loadCases(skill).map((item) => item.id);
+  if (options.cases) {
+    const unknown = options.cases.filter((id) => !ids.includes(id));
+    if (unknown.length > 0) fail(`Unknown case for ${skill}: ${unknown.join(', ')}`);
+    ids = ids.filter((id) => options.cases.includes(id));
+  }
+  if (options.maxCases) ids = ids.slice(0, options.maxCases);
+  return ids;
+}
+
+function agentConfig(entry, skill) {
+  const kwargs = {};
+  if (entry.effort) kwargs.reasoning_effort = entry.effort;
+  if (entry.version) kwargs.version = entry.version;
+  return {
+    name: entry.agent,
+    model_name: entry.model,
+    ...(skill ? { skills: [join('skills', skill)] } : {}),
+    ...(Object.keys(kwargs).length > 0 ? { kwargs } : {}),
   };
-  visit(dir);
-  return newest?.path;
+}
+
+function runEntry(skill, entry, tasksPath, options) {
+  const hasKey = Boolean(process.env[entry.key]);
+  if (!hasKey && !options.dryRun) {
+    console.log(`\n== ${skill} / ${entry.id}: skipped, missing ${entry.key}`);
+    return { status: 'skipped', reason: `missing ${entry.key}` };
+  }
+
+  const entryDir = join(resultsDir, skill, entry.id);
+  mkdirSync(entryDir, { recursive: true });
+  const jobName = new Date().toISOString().replace(/[-:]/g, '').replace(/\..*/, '');
+  const job = {
+    job_name: jobName,
+    jobs_dir: relative(root, entryDir),
+    n_attempts: options.attempts ?? matrix.attempts,
+    n_concurrent_trials: options.concurrency ?? matrix.concurrency,
+    // The first agent is the with-skill arm, the second the baseline.
+    agents: [agentConfig(entry, skill), agentConfig(entry)],
+    datasets: [{ path: relative(root, tasksPath) }],
+  };
+  const jobFile = join(entryDir, 'job.json');
+  writeFileSync(jobFile, `${JSON.stringify(job, null, 2)}\n`);
+
+  const args = ['run', '--config', relative(root, jobFile), '--yes'];
+  if (options.dryRun) args.push('--dry-run');
+  console.log(`\n== ${skill} / ${entry.id}`);
+  console.log(`${entry.agent}, ${entry.model}, effort ${entry.effort ?? 'default'}, key ${entry.key}${hasKey ? '' : ' (not set)'}`);
+  console.log(`harbor ${args.join(' ')}`);
+
+  // Harbor checks for the provider key even in a dry run, so give it a placeholder then.
+  const key = process.env[entry.key] ?? (options.dryRun ? 'dry-run-placeholder' : '');
+  const run = spawnSync('harbor', args, { cwd: root, env: providerEnv({ [entry.key]: key }), stdio: 'inherit' });
+  if (run.error) return { status: 'error', reason: run.error.message };
+  if (options.dryRun) return { status: run.status === 0 ? 'dry-run ok' : 'dry-run failed' };
+  return { status: run.status === 0 ? 'completed' : 'failed' };
 }
 
 function readJson(path) {
@@ -121,128 +148,214 @@ function readJson(path) {
   }
 }
 
-function runEntry(skill, entry, options) {
-  const { route, env, agentModel } = runSettings(entry);
-  const missing = process.env[route.key] ? [] : [route.key];
-  if (missing.length > 0 && !options.dryRun) {
-    console.log(`\n== ${skill} / ${entry.id}: skipped, missing ${missing.join(', ')}`);
-    return { status: 'skipped', reason: `missing ${missing.join(', ')}` };
+// Whether the agent loaded the skill, judged from its recorded tool calls: a
+// call to a skill tool naming the skill, or a read of a file inside the skill
+// directory. Returns undefined when no trajectory was recorded.
+function skillLoaded(trialDir, skill) {
+  const trajectory = readJson(join(trialDir, 'agent', 'trajectory.json'));
+  if (!trajectory?.steps) return undefined;
+  for (const step of trajectory.steps) {
+    for (const call of step.tool_calls ?? []) {
+      const name = String(call.function_name ?? '').toLowerCase();
+      const args = JSON.stringify(call.arguments ?? {});
+      if (name.includes('skill') && args.includes(skill)) return true;
+      if (args.includes(`skills/${skill}/`) || args.includes(`${skill}/SKILL.md`)) return true;
+    }
   }
-
-  const resultsDir = join(runsDir, skill, entry.id);
-  const args = [
-    'tier3',
-    'evaluate',
-    join('skills', skill),
-    '--agents',
-    entry.agent,
-    '--agent-model',
-    `${entry.agent}=${agentModel}`,
-    '--env-mode',
-    options.envMode ?? matrix.envMode,
-    '--n-attempts',
-    String(options.attempts ?? matrix.attempts),
-    '--results-dir',
-    relative(root, resultsDir),
-  ];
-  if (options.maxCases) args.push('--max-cases', String(options.maxCases));
-
-  console.log(`\n== ${skill} / ${entry.id}`);
-  console.log(`route: ${entry.route} (${route.key}), judge: ${env.SKILL_EVAL_LLM_MODEL}`);
-  console.log(`skillevaluator ${args.join(' ')}`);
-  if (options.dryRun) {
-    if (missing.length > 0) console.log(`(would be skipped: missing ${missing.join(', ')})`);
-    return { status: 'dry-run' };
-  }
-
-  mkdirSync(resultsDir, { recursive: true });
-  const run = spawnSync('skillevaluator', args, { cwd: root, env, stdio: 'inherit' });
-  if (run.error) return { status: 'error', reason: run.error.message };
-  return { status: run.status === 0 ? 'completed' : 'failed', exitCode: run.status };
+  return false;
 }
 
-// Reads the with/without deltas SkillEvaluator wrote for one matrix entry.
-function readLift(skill, entry) {
-  const dir = join(runsDir, skill, entry.id);
-  const lift = readJson(findNewest(dir, 'lift.json') ?? '');
-  const custom = readJson(findNewest(dir, 'custom_lift.json') ?? '');
-  if (!lift && !custom) return undefined;
-  const pick = (source, metric) => source?.[metric];
+// Trials of the newest job for one entry, or undefined when there is none.
+function readTrials(skill, entry) {
+  const entryDir = join(resultsDir, skill, entry.id);
+  if (!existsSync(entryDir)) return undefined;
+  const jobs = readdirSync(entryDir)
+    .map((name) => join(entryDir, name))
+    .filter((path) => statSync(path).isDirectory() && existsSync(join(path, 'config.json')))
+    .sort();
+  const jobDir = jobs.at(-1);
+  if (!jobDir) return undefined;
+
+  const trials = [];
+  for (const name of readdirSync(jobDir)) {
+    const trialDir = join(jobDir, name);
+    const result = readJson(join(trialDir, 'result.json'));
+    if (!result?.config?.agent) continue;
+    const started = Date.parse(result.agent_execution?.started_at);
+    const finished = Date.parse(result.agent_execution?.finished_at);
+    trials.push({
+      caseId: basename(result.task_id?.path ?? ''),
+      withSkill: (result.config.agent.skills ?? []).length > 0,
+      rewards: result.verifier_result?.rewards,
+      error: result.exception_info?.exception_type,
+      inputTokens: result.agent_result?.n_input_tokens,
+      outputTokens: result.agent_result?.n_output_tokens,
+      costUsd: result.agent_result?.cost_usd,
+      seconds: Number.isFinite(started) && Number.isFinite(finished) ? (finished - started) / 1000 : undefined,
+      skillLoaded: skillLoaded(trialDir, skill),
+    });
+  }
+  return { jobDir, trials };
+}
+
+const mean = (values) => {
+  const numbers = values.filter((value) => typeof value === 'number' && Number.isFinite(value));
+  return numbers.length > 0 ? numbers.reduce((sum, value) => sum + value, 0) / numbers.length : undefined;
+};
+
+// Per-arm scores for one entry. A metric is averaged over attempts per case,
+// then over the cases that both arms scored, so the arms are compared on the
+// same cases.
+function scoreEntry(skill, entry) {
+  const data = readTrials(skill, entry);
+  if (!data) return undefined;
+  const cases = new Map(loadCases(skill).map((item) => [item.id, item]));
+  const arm = (withSkill) => data.trials.filter((trial) => trial.withSkill === withSkill);
+
+  const metrics = {};
+  for (const metric of METRICS) {
+    const perCase = (trials) => {
+      const byCase = new Map();
+      for (const trial of trials) {
+        const value = trial.rewards?.[metric];
+        if (typeof value !== 'number') continue;
+        byCase.set(trial.caseId, [...(byCase.get(trial.caseId) ?? []), value]);
+      }
+      return new Map([...byCase].map(([id, values]) => [id, mean(values)]));
+    };
+    const withCases = perCase(arm(true));
+    const withoutCases = perCase(arm(false));
+    const shared = [...withCases.keys()].filter((id) => withoutCases.has(id));
+    if (shared.length === 0) continue;
+    const withSkill = mean(shared.map((id) => withCases.get(id)));
+    const withoutSkill = mean(shared.map((id) => withoutCases.get(id)));
+    metrics[metric] = { with_skill: withSkill, without_skill: withoutSkill, delta: withSkill - withoutSkill, cases: shared.length };
+  }
+
+  const usage = (trials) => ({
+    trials: trials.length,
+    errors: trials.filter((trial) => trial.error).length,
+    input_tokens: mean(trials.map((trial) => trial.inputTokens)),
+    output_tokens: mean(trials.map((trial) => trial.outputTokens)),
+    cost_usd: mean(trials.map((trial) => trial.costUsd)),
+    seconds: mean(trials.map((trial) => trial.seconds)),
+  });
+  const loadRate = (shouldTrigger) => {
+    const observed = arm(true).filter(
+      (trial) => cases.get(trial.caseId)?.should_trigger === shouldTrigger && trial.skillLoaded !== undefined,
+    );
+    return observed.length > 0 ? observed.filter((trial) => trial.skillLoaded).length / observed.length : undefined;
+  };
+
   return {
-    overall: pick(lift, 'overall'),
-    fileChecks: pick(custom, 'file_checks'),
-    astroBuild: pick(custom, 'astro_build'),
+    job: relative(root, data.jobDir),
+    metrics,
+    with_skill: usage(arm(true)),
+    without_skill: usage(arm(false)),
+    skill_loaded: { expected: loadRate(true), not_expected: loadRate(false) },
   };
 }
 
-function formatCell(metric) {
-  if (!metric || typeof metric.delta !== 'number') return 'n/a';
+const formatScore = (metric) => {
+  if (!metric) return 'n/a';
   const sign = metric.delta > 0 ? '+' : '';
   return `${metric.without_skill.toFixed(2)} → ${metric.with_skill.toFixed(2)} (${sign}${metric.delta.toFixed(2)})`;
-}
+};
+const formatPair = (without, withSkill, format) =>
+  without === undefined || withSkill === undefined ? 'n/a' : `${format(without)} → ${format(withSkill)}`;
+const formatRate = (rate) => (rate === undefined ? 'n/a' : `${Math.round(rate * 100)}%`);
+const thousands = (value) => `${Math.round(value / 1000)}k`;
 
 function summarise(skills, entries, statuses) {
   const lines = ['# Skill evaluation matrix', ''];
   const regressions = [];
   const tolerance = matrix.regressionTolerance ?? 0;
+  const summary = {};
 
   for (const skill of skills) {
+    summary[skill] = {};
     lines.push(`## ${skill}`, '');
-    lines.push('| Entry | Agent | Model | Effort | Tier | Overall (judged) | File checks | Astro build | Status |');
-    lines.push('| --- | --- | --- | --- | --- | --- | --- | --- | --- |');
+    lines.push('| Entry | Agent | Model | Effort | Tier | File checks | Astro build | Trials (errors) | Input tokens | Seconds | Skill loaded: expected / not expected | Status |');
+    lines.push('| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |');
     for (const entry of entries) {
-      const lift = readLift(skill, entry);
+      const scores = scoreEntry(skill, entry);
       const status = statuses.get(`${skill}/${entry.id}`);
-      const statusText = status ? [status.status, status.reason].filter(Boolean).join(': ') : lift ? 'from disk' : 'no results';
+      const statusText = status ? [status.status, status.reason].filter(Boolean).join(': ') : scores ? 'from disk' : 'no results';
+      summary[skill][entry.id] = { ...entry, status: statusText, ...scores };
+      const trials = scores
+        ? `${scores.without_skill.trials} + ${scores.with_skill.trials} (${scores.without_skill.errors + scores.with_skill.errors})`
+        : 'n/a';
       lines.push(
-        `| ${entry.id} | ${entry.agent} | ${entry.model} | ${AGENT_EFFORT[entry.agent] ?? 'unknown'} | ${entry.tier} | ${formatCell(lift?.overall)} | ${formatCell(lift?.fileChecks)} | ${formatCell(lift?.astroBuild)} | ${statusText} |`,
+        `| ${[
+          entry.id,
+          entry.agent,
+          entry.model,
+          entry.effort ?? 'default',
+          entry.tier,
+          formatScore(scores?.metrics.file_checks),
+          formatScore(scores?.metrics.astro_build),
+          trials,
+          formatPair(scores?.without_skill.input_tokens, scores?.with_skill.input_tokens, thousands),
+          formatPair(scores?.without_skill.seconds, scores?.with_skill.seconds, (value) => Math.round(value)),
+          `${formatRate(scores?.skill_loaded.expected)} / ${formatRate(scores?.skill_loaded.not_expected)}`,
+          statusText,
+        ].join(' | ')} |`,
       );
       if (entry.tier === 'frontier') {
-        for (const [name, metric] of Object.entries({ 'file checks': lift?.fileChecks, 'astro build': lift?.astroBuild })) {
-          if (metric && typeof metric.delta === 'number' && metric.delta < -tolerance) {
-            regressions.push(`${skill} / ${entry.id}: ${name} ${metric.delta.toFixed(2)}`);
-          }
+        for (const metric of ['file_checks', 'astro_build']) {
+          const delta = scores?.metrics[metric]?.delta;
+          if (typeof delta === 'number' && delta < -tolerance) regressions.push(`${skill} / ${entry.id}: ${metric} ${delta.toFixed(2)}`);
         }
       }
     }
     lines.push('');
   }
 
-  lines.push('Cells show without-skill → with-skill (difference). Scores are 0-1.');
-  lines.push('File checks and Astro build are deterministic and comparable across every row.');
-  lines.push('Overall is judged by the model named for that route in evals/matrix.json, so compare it within a harness only.');
-  lines.push('Effort is the reasoning effort SkillEvaluator applies to the agent; it cannot be set per run.');
+  lines.push('Score, token and time cells show without-skill → with-skill. Scores are 0-1, averaged over attempts and then over cases.');
+  lines.push('File checks and Astro build are deterministic, so every row is comparable.');
+  lines.push('Trials are baseline + with-skill; tokens and seconds are per-trial means.');
+  lines.push('Skill loaded is the share of with-skill trials in which the agent loaded the skill, for cases where it should and for cases where it should not. It is read from recorded tool calls and is a heuristic.');
   lines.push('');
   if (regressions.length > 0) {
     lines.push('## Frontier regressions', '');
     for (const regression of regressions) lines.push(`- ${regression}`);
     lines.push('');
   }
-  return { text: lines.join('\n'), regressions };
+  return { text: lines.join('\n'), regressions, summary };
 }
 
 loadLocalEnv();
 const options = parseArgs(process.argv.slice(2));
+
 const skills = options.skill ? [options.skill] : listSkills();
 for (const skill of skills) {
-  if (!existsSync(join(root, 'skills', skill, 'evals', 'evals.json'))) fail(`No evals for skill: ${skill}`);
+  if (!listSkills().includes(skill)) fail(`No eval cases for skill: ${skill}`);
 }
+const problems = [...validateMatrix(), ...skills.flatMap((skill) => validateSkill(skill))];
+if (problems.length > 0) fail(`Invalid eval configuration:\n${problems.map((problem) => `  ${problem}`).join('\n')}`);
+if (options.check) {
+  console.log(`OK: ${skills.map((skill) => `${skill} (${loadCases(skill).length} cases)`).join(', ')}; ${matrix.entries.length} matrix entries`);
+  process.exit(0);
+}
+
 const entries = options.only ? matrix.entries.filter((entry) => options.only.includes(entry.id)) : matrix.entries;
 if (entries.length === 0) fail('No matrix entries selected.');
 
 const statuses = new Map();
 if (!options.summaryOnly) {
   for (const skill of skills) {
-    for (const entry of entries) statuses.set(`${skill}/${entry.id}`, runEntry(skill, entry, options));
+    const tasksPath = buildTasks(skill, { only: selectCases(skill, options) });
+    for (const entry of entries) statuses.set(`${skill}/${entry.id}`, runEntry(skill, entry, tasksPath, options));
   }
 }
 
-if (!options.dryRun) {
-  const { text, regressions } = summarise(skills, entries, statuses);
-  mkdirSync(runsDir, { recursive: true });
-  writeFileSync(join(runsDir, 'summary.md'), text);
-  console.log(`\n${text}`);
-  console.log(`Summary written to ${relative(root, join(runsDir, 'summary.md'))}`);
-  const failed = [...statuses.values()].some((status) => status.status === 'failed' || status.status === 'error');
-  if (failed || (options.strict && regressions.length > 0)) process.exit(1);
-}
+const failed = [...statuses.values()].some((status) => ['failed', 'error', 'dry-run failed'].includes(status.status));
+if (options.dryRun) process.exit(failed ? 1 : 0);
+
+const { text, regressions, summary } = summarise(skills, entries, statuses);
+mkdirSync(resultsDir, { recursive: true });
+writeFileSync(join(resultsDir, 'summary.md'), text);
+writeFileSync(join(resultsDir, 'summary.json'), `${JSON.stringify(summary, null, 2)}\n`);
+console.log(`\n${text}`);
+console.log(`Summary written to ${relative(root, join(resultsDir, 'summary.md'))} and summary.json`);
+if (failed || (options.strict && regressions.length > 0)) process.exit(1);
