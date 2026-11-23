@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: Apache-2.0
+# NVIDIA SkillEvaluator Tier 1: quality, schema, harness compatibility and
+# security scanning (SkillSpector, Gitleaks, Bandit) for changed skills.
+# Copied from NVIDIA/SkillEvaluator ci/bundles/1.0.1/skill-checks.yml; keep the
+# workflow and image pins together when upgrading.
+name: Skill checks
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+  # PR comments or hosted reports: uncomment this, then refresh trusted-caller-blobs.
+  # id-token: write
+jobs:
+  skills:
+    uses: NVIDIA/SkillEvaluator/.github/workflows/evaluate-skills.yml@c9369a7811bde083b550f2ac488222e8c388d7fd
+    with:
+      image: ghcr.io/nvidia/skillevaluator-tier1@sha256:fbff256df8f760019539d442b7cb533d7ec50efab37f4482b7b670e2e4b4189a
+      paths: skills
+      min-score: 70
+      # Applies the reviewed exceptions in .skillevaluator/skillspector-baselines.yaml.
+      # Pull requests read the manifest and baselines from the target branch, so a
+      # change to them only takes effect after it is merged.
+      security-baselines: true
+      scan-mode: auto
+      llm: false

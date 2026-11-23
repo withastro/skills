@@ -1,0 +1,29 @@
+# Reviewed SkillSpector exceptions for the evaluation material bundled in each
+# skill's evals/ directory. Every rule is limited to evals/ paths: findings in
+# SKILL.md and references/ are never suppressed here.
+#
+# Applied in CI through .skillevaluator/skillspector-baselines.yaml, and locally
+# with `--skillspector-baseline .skillevaluator/baselines/eval-fixtures.yaml`.
+version: 2
+rules:
+  - id: "SC1"
+    path: "evals/files/*/package.json"
+    reason: "Reviewed: fixture projects use caret ranges on purpose so eval runs install the current Astro and Starlight releases the skills describe."
+  - id: "SC4"
+    path: "evals/files/*/package.json"
+    reason: "Reviewed: same fixture manifests; they are test inputs installed inside a throwaway trial container, never shipped as an application."
+  - id: "TM1"
+    path: "evals/environment/Dockerfile"
+    reason: "Reviewed: `rm -rf /var/lib/apt/lists/*` is the standard apt cache cleanup in the trial image."
+  - id: "TM2"
+    path: "evals/environment/Dockerfile"
+    reason: "Reviewed: chained apt-get commands in a single RUN layer of the trial image."
+  - id: "RP1"
+    path: "evals/environment/Dockerfile"
+    reason: "Reviewed: the match is the npx symlink copied from the official Node.js image, not an MCP server launch."
+  - id: "AST4"
+    path: "evals/grader.py"
+    reason: "Reviewed: the grader runs `npm install` and `astro build` with a fixed argument list, no shell, a timeout and a minimal named environment."
+  - id: "TT2"
+    path: "evals/grader.py"
+    reason: "Reviewed: environment values are the harness-provided output paths and integer timeouts read by name; no credentials are read."
