@@ -250,9 +250,14 @@ function readTrials(skill, entry) {
   if (jobs.length === 0) return undefined;
   const byCase = new Map();
   const byCaseJob = new Map();
+  let notRun = 0;
   for (const jobDir of jobs) {
     const fromJob = new Map();
     for (const trial of readJobTrials(jobDir, skill)) {
+      if (NOT_RUN_ERRORS.test(trial.error ?? '')) {
+        notRun += 1;
+        continue;
+      }
       const slot = `${trial.caseId}\n${trial.withSkill}`;
       fromJob.set(slot, [...(fromJob.get(slot) ?? []), trial]);
     }
@@ -266,8 +271,13 @@ function readTrials(skill, entry) {
   for (const jobDir of jobs) {
     if ([...byCaseJob.values()].includes(jobDir)) used.add(jobDir);
   }
-  return { jobDir: jobs.at(-1), jobs: jobs.length, usedJobs: [...used], trials: [...byCase.values()].flat() };
+  return { jobDir: jobs.at(-1), jobs: jobs.length, usedJobs: [...used], notRun, trials: [...byCase.values()].flat() };
 }
+
+// Errors that mean the agent never got to work on the task: the provider
+// refused the call or the trial was interrupted. They say nothing about the
+// model or the skill, so those trials are left out of the scores.
+const NOT_RUN_ERRORS = /^(ApiUsageLimitError|RateLimitError|AuthenticationError|NetworkConnectionError|CancelledError)$/;
 
 function readJobTrials(jobDir, skill) {
   const trials = [];
@@ -370,6 +380,7 @@ function scoreEntry(skill, entry) {
   return {
     job: relative(root, data.jobDir),
     jobs: data.jobs,
+    not_run: data.notRun,
     used_jobs: data.usedJobs.map((jobDir) => relative(root, jobDir)),
     agent_versions: [...new Set(data.trials.map((trial) => trial.agentVersion).filter(Boolean))],
     scored_trials: data.trials.filter((trial) => trial.rewards).length,
@@ -413,7 +424,7 @@ function summarise(skills, entries, statuses) {
       const statusText = status ? [status.status, status.reason].filter(Boolean).join(': ') : scores ? 'from disk' : 'no results';
       summary[skill][entry.id] = { ...entry, status: statusText, ...scores };
       const trials = scores
-        ? `${scores.without_skill.trials} + ${scores.with_skill.trials} (${scores.without_skill.errors + scores.with_skill.errors})`
+        ? `${scores.without_skill.trials} + ${scores.with_skill.trials} (${scores.without_skill.errors + scores.with_skill.errors}${scores.not_run ? `, ${scores.not_run} not run` : ''})`
         : 'n/a';
       lines.push(
         `| ${[
@@ -447,7 +458,7 @@ function summarise(skills, entries, statuses) {
   lines.push('Score, token and time cells show without-skill → with-skill. Scores are 0-1, averaged over attempts and then over cases.');
   lines.push('File checks, output checks and Astro build are deterministic, so every row is comparable. Each is averaged over the cases that have it.');
   lines.push('Cases is how many of the skill\'s cases have results. When several runs cover a case, the newest run counts.');
-  lines.push('Trials are baseline + with-skill. Input tokens, cost and seconds are per trial, averaged per case and then over cases, with the change the skill makes; lower is better. Cost is the agent\'s model cost as reported by Harbor.');
+  lines.push('Trials are baseline + with-skill, with errors in brackets. Trials the provider refused or that were interrupted are not scored and are listed as not run. Input tokens, cost and seconds are per trial, averaged per case and then over cases, with the change the skill makes; lower is better. Cost is the agent\'s model cost as reported by Harbor.');
   lines.push('Skill loaded is the share of with-skill trials in which the agent loaded the skill, for cases where it should and for cases where it should not. It is read from recorded tool calls and is a heuristic.');
   lines.push('');
   if (regressions.length > 0) {
