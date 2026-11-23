@@ -28,19 +28,16 @@ The skills work without the MCP server. When it is available, they use it to loo
 
 Each skill is a short `SKILL.md` that lists the removed and renamed APIs agents most often get wrong, plus a few reference files the agent reads only when the task needs them. The skills point to the official docs instead of copying them.
 
-Every skill ships with:
-
-- `skill-card.md`: owner, intended use, risks and evidence.
-- `evals/`: an evaluation dataset with small fixture projects. Each case is run with and without the skill to measure what the skill changes.
+Each skill directory holds only what an agent needs, plus a `skill-card.md` (owner, intended use, risks and evidence). The evaluation cases and fixture projects live in [`evals/`](evals/), outside the skills, so they are not installed into your project.
 
 ## Checks
 
 | Check | What it covers | When |
 | --- | --- | --- |
-| Validate | Agent Skills specification, eval dataset contract | Every pull request |
+| Validate | Agent Skills specification, eval cases and fixtures | Every pull request |
 | Skill checks | [NVIDIA SkillEvaluator](https://github.com/NVIDIA/SkillEvaluator) Tier 1: quality score, harness compatibility, security scanning with SkillSpector and Gitleaks | Every pull request |
 | Deduplication | SkillEvaluator Tier 2: repeated instructions inside a skill and overlap between skills | Locally, by maintainers with their own provider keys |
-| Evals | SkillEvaluator Tier 3: with-skill versus without-skill runs on Claude Code, Codex and OpenCode, with a small and a frontier model each | Locally, by maintainers with their own provider keys |
+| Evals | [Harbor](https://github.com/harbor-framework/harbor): each case run with and without the skill on Claude Code, Codex and OpenCode, with a small and a frontier model each and a set reasoning effort | Locally, by maintainers with their own provider keys |
 
 The repository is set up for [mise](https://mise.jdx.dev/): `mise install` provides the tools and `mise run check` runs every check that needs no model key.
 

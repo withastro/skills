@@ -53,7 +53,7 @@ Mitigation: Queries are API and feature names. The skill does not instruct the a
 - [Astro documentation](https://docs.astro.build/)
 - [Upgrade to Astro v7](https://docs.astro.build/en/guides/upgrade-to/v7/), [v6](https://docs.astro.build/en/guides/upgrade-to/v6/), [v5](https://docs.astro.build/en/guides/upgrade-to/v5/)
 - [Build with AI](https://docs.astro.build/en/guides/build-with-ai/)
-- Scan and evaluation evidence: the "Skill checks" workflow runs in [withastro/skills](https://github.com/withastro/skills/actions) (NVIDIA SkillEvaluator Tier 1, including SkillSpector), and the evaluation dataset in `evals/evals.json`
+- Scan and evaluation evidence: the "Skill checks" workflow runs in [withastro/skills](https://github.com/withastro/skills/actions) (NVIDIA SkillEvaluator Tier 1, including SkillSpector), and the evaluation cases in [`evals/astro-best-practices/`](https://github.com/withastro/skills/tree/main/evals/astro-best-practices)
 
 ## Skill Output
 

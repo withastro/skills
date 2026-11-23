@@ -12,17 +12,17 @@ Steps for releasing a new version of a skill. Adapted from NVIDIA's [agent skill
 
 ## Scanning and evaluation
 
-- [ ] `pnpm validate`, `pnpm eval:validate` and `pnpm check:grader` pass.
+- [ ] `pnpm validate` and `pnpm eval:check` pass.
+- [ ] The skill directory contains only `SKILL.md`, `references/` and `skill-card.md`.
 - [ ] The Skill checks workflow (SkillEvaluator Tier 1) passes on the release commit. Download its report artifact.
 - [ ] No critical or high finding is open. Medium findings in `SKILL.md` and `references/` are reviewed and either fixed or noted in the pull request.
-- [ ] Security scan exceptions in `.skillevaluator/baselines/` still apply only to `evals/` paths.
 - [ ] `pnpm check:tier2` (SkillEvaluator Tier 2) passes: no duplicated instructions inside the skill and no high-severity overlap with another skill.
 - [ ] `pnpm check:harness` shows the skill loads in Claude Code, Codex and OpenCode.
 - [ ] A full live evaluation was run locally for the skill (`node scripts/eval-matrix.mjs --skill <name>`), without `--max-cases`, covering at least one small and one frontier model. Note which matrix entries were skipped for lack of a key.
 - [ ] For every frontier model, the deterministic scores with the skill are not lower than without it beyond the tolerance (`--strict` passes).
 - [ ] For at least one small model, the skill improves the deterministic scores. If it does not, find out why before releasing: the content may be restating what models already know.
-- [ ] Negative cases did not trigger the skill.
-- [ ] The summary table from `.eval-runs/summary.md` is attached to the release notes.
+- [ ] The skill was loaded in most trials where it should be, and not in the cases marked `should_trigger: false`.
+- [ ] The summary table from `.eval-results/summary.md` is attached to the release notes.
 
 ## Skill card
 
