@@ -223,6 +223,7 @@ It refuses to record unless the result can be tied to exactly what was tested:
 
 - every job was started at the current commit, with no uncommitted changes in `skills/`, `evals/` or `scripts/`;
 - every entry that ran covers all of the skill's cases;
+- every job used the number of attempts set in `evals/matrix.json`;
 - the whole matrix is selected (no `--skill`, `--only`, `--case` or `--max-cases`).
 
 Entries without a key are listed in the record as not run. So the sequence is: commit your changes, run the full matrix, then record.

@@ -180,7 +180,7 @@ function runEntry(skill, entry, tasksPath, options) {
   const jobFile = join(entryDir, 'job.json');
   writeFileSync(jobFile, `${JSON.stringify(job, null, 2)}\n`);
   if (!options.dryRun) {
-    const meta = { ...sourceState(), started_at: new Date().toISOString(), partial: Boolean(options.cases || options.maxCases) };
+    const meta = { ...sourceState(), started_at: new Date().toISOString(), attempts: job.n_attempts, partial: Boolean(options.cases || options.maxCases) };
     writeFileSync(join(entryDir, `${jobName}.meta.json`), `${JSON.stringify(meta, null, 2)}\n`);
   }
 
@@ -445,6 +445,7 @@ function record(skills, entries, summary, text) {
         if (!meta) problems.push(`${name}: ${jobDir} has no provenance file (run before --record existed)`);
         else if (meta.commit !== state.commit) problems.push(`${name}: ${jobDir} ran at commit ${meta.commit.slice(0, 7)}, not the current ${state.commit.slice(0, 7)}`);
         else if (meta.dirty) problems.push(`${name}: ${jobDir} ran with uncommitted changes`);
+        else if (meta.attempts !== matrix.attempts) problems.push(`${name}: ${jobDir} ran with ${meta.attempts} attempts, not the ${matrix.attempts} in evals/matrix.json`);
       }
     }
   }
