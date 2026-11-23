@@ -112,13 +112,7 @@ function agentConfig(entry, skill) {
 
 // Newest Harbor job directory for one entry, or undefined.
 function latestJobDir(skill, entry) {
-  const entryDir = join(resultsDir, skill, entry.id);
-  if (!existsSync(entryDir)) return undefined;
-  return readdirSync(entryDir)
-    .map((name) => join(entryDir, name))
-    .filter((path) => statSync(path).isDirectory() && existsSync(join(path, 'config.json')))
-    .sort()
-    .at(-1);
+  return jobDirs(skill, entry).at(-1);
 }
 
 // Whether every trial of a job has finished, with a score or an error.
@@ -207,11 +201,34 @@ function skillLoaded(trialDir, skill) {
   return false;
 }
 
-// Trials of the newest job for one entry, or undefined when there is none.
-function readTrials(skill, entry) {
-  const jobDir = latestJobDir(skill, entry);
-  if (!jobDir) return undefined;
+// Job directories for one entry, oldest first.
+function jobDirs(skill, entry) {
+  const entryDir = join(resultsDir, skill, entry.id);
+  if (!existsSync(entryDir)) return [];
+  return readdirSync(entryDir)
+    .map((name) => join(entryDir, name))
+    .filter((path) => statSync(path).isDirectory() && existsSync(join(path, 'config.json')))
+    .sort();
+}
 
+// Trials for one entry, or undefined when there are none. Runs can cover
+// different cases (--case, --max-cases), so each case is taken from the newest
+// job that ran it; older trials of that case are ignored.
+function readTrials(skill, entry) {
+  const jobs = jobDirs(skill, entry);
+  if (jobs.length === 0) return undefined;
+  const byCase = new Map();
+  for (const jobDir of jobs) {
+    const fromJob = new Map();
+    for (const trial of readJobTrials(jobDir, skill)) {
+      fromJob.set(trial.caseId, [...(fromJob.get(trial.caseId) ?? []), trial]);
+    }
+    for (const [caseId, trials] of fromJob) byCase.set(caseId, trials);
+  }
+  return { jobDir: jobs.at(-1), jobs: jobs.length, trials: [...byCase.values()].flat() };
+}
+
+function readJobTrials(jobDir, skill) {
   const trials = [];
   for (const name of readdirSync(jobDir)) {
     const trialDir = join(jobDir, name);
@@ -231,7 +248,7 @@ function readTrials(skill, entry) {
       skillLoaded: skillLoaded(trialDir, skill),
     });
   }
-  return { jobDir, trials };
+  return trials;
 }
 
 const mean = (values) => {
@@ -285,6 +302,8 @@ function scoreEntry(skill, entry) {
 
   return {
     job: relative(root, data.jobDir),
+    jobs: data.jobs,
+    cases: new Set(data.trials.map((trial) => trial.caseId)).size,
     metrics,
     with_skill: usage(arm(true)),
     without_skill: usage(arm(false)),
@@ -311,8 +330,8 @@ function summarise(skills, entries, statuses) {
   for (const skill of skills) {
     summary[skill] = {};
     lines.push(`## ${skill}`, '');
-    lines.push('| Entry | Agent | Model | Effort | Tier | File checks | Output checks | Astro build | Trials (errors) | Input tokens | Seconds | Skill loaded: expected / not expected | Status |');
-    lines.push('| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |');
+    lines.push('| Entry | Agent | Model | Effort | Tier | Cases | File checks | Output checks | Astro build | Trials (errors) | Input tokens | Seconds | Skill loaded: expected / not expected | Status |');
+    lines.push('| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |');
     for (const entry of entries) {
       const scores = scoreEntry(skill, entry);
       const status = statuses.get(`${skill}/${entry.id}`);
@@ -328,6 +347,7 @@ function summarise(skills, entries, statuses) {
           entry.model,
           entry.effort ?? 'default',
           entry.tier,
+          scores ? `${scores.cases} of ${loadCases(skill).length}` : 'n/a',
           formatScore(scores?.metrics.file_checks),
           formatScore(scores?.metrics.output_checks),
           formatScore(scores?.metrics.astro_build),
@@ -350,6 +370,7 @@ function summarise(skills, entries, statuses) {
 
   lines.push('Score, token and time cells show without-skill → with-skill. Scores are 0-1, averaged over attempts and then over cases.');
   lines.push('File checks, output checks and Astro build are deterministic, so every row is comparable. Each is averaged over the cases that have it.');
+  lines.push('Cases is how many of the skill\'s cases have results. When several runs cover a case, the newest run counts.');
   lines.push('Trials are baseline + with-skill; tokens and seconds are per-trial means.');
   lines.push('Skill loaded is the share of with-skill trials in which the agent loaded the skill, for cases where it should and for cases where it should not. It is read from recorded tool calls and is a heuristic.');
   lines.push('');
