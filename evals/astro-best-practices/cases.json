@@ -239,9 +239,9 @@
         },
         {
           "id": "form-posts",
-          "path": "src/pages/index.astro",
+          "path": "src/**/*.astro",
           "contains": [
-            "method=[\"']?POST",
+            "method=[\"']?[Pp][Oo][Ss][Tt]",
             "actions\\."
           ]
         },
