@@ -554,14 +554,14 @@
           "id": "session-read",
           "path": "src/pages/visits.astro",
           "contains": [
-            "await\\s+Astro\\.session\\??\\.get\\("
+            "await\\s+(Astro\\.)?session\\??\\.get\\("
           ]
         },
         {
           "id": "session-write",
           "path": "src/pages/visits.astro",
           "contains": [
-            "Astro\\.session\\??\\.set\\("
+            "(Astro\\.)?session\\??\\.set\\("
           ]
         },
         {
