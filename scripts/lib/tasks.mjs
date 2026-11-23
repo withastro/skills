@@ -10,6 +10,8 @@
 //     tests/test.sh           runs the grader
 //     tests/grader.py         evals/grader.py
 //     tests/case.json         the case, read by the grader
+//     solution/               reference solution, if evals/<skill>/solutions/<case-id>/
+//                             exists. Only Harbor's oracle agent receives it.
 
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync, chmodSync } from 'node:fs';
 import { join } from 'node:path';
@@ -27,8 +29,9 @@ const CASE_KEYS = new Set([
   'assertions',
   'build_check',
   'file_checks',
+  'output_checks',
 ]);
-const CHECK_KEYS = new Set(['id', 'path', 'exists', 'contains', 'not_contains']);
+const CHECK_KEYS = new Set(['id', 'path', 'exists', 'contains', 'not_contains', 'any_of']);
 
 export function listSkills() {
   return readdirSync(evalsDir).filter((name) => existsSync(join(evalsDir, name, 'cases.json')));
@@ -68,10 +71,17 @@ export function validateSkill(skill) {
     if (typeof item.fixture !== 'string' || !existsSync(join(evalsDir, skill, 'fixtures', item.fixture))) {
       report(`${where}: fixture "${item.fixture}" not found in evals/${skill}/fixtures/`);
     }
-    if (!item.file_checks?.length && !item.build_check) report(`${where}: needs file_checks or build_check to be graded`);
-    for (const check of item.file_checks ?? []) {
-      for (const key of Object.keys(check)) if (!CHECK_KEYS.has(key)) report(`${where}: unknown file check field "${key}"`);
-      if (typeof check.path !== 'string' || check.path === '') report(`${where}: file check needs a path`);
+    if (!item.file_checks?.length && !item.output_checks?.length && !item.build_check) {
+      report(`${where}: needs file_checks, output_checks or build_check to be graded`);
+    }
+    const validateCheck = (check) => {
+      for (const key of Object.keys(check)) if (!CHECK_KEYS.has(key)) report(`${where}: unknown check field "${key}"`);
+      if (Array.isArray(check.any_of)) {
+        if (check.any_of.length < 2) report(`${where}: any_of needs at least two checks`);
+        check.any_of.forEach(validateCheck);
+        return;
+      }
+      if (typeof check.path !== 'string' || check.path === '') report(`${where}: check needs a path`);
       for (const expression of [...(check.contains ?? []), ...(check.not_contains ?? [])]) {
         try {
           new RegExp(expression);
@@ -79,7 +89,8 @@ export function validateSkill(skill) {
           report(`${where}: invalid regular expression ${JSON.stringify(expression)}`);
         }
       }
-    }
+    };
+    [...(item.file_checks ?? []), ...(item.output_checks ?? [])].forEach(validateCheck);
   }
   if (!data.cases.some((item) => item.should_trigger === false)) report('needs at least one should_trigger: false case');
   return problems;
@@ -103,6 +114,24 @@ cpus = 2
 memory_mb = 4096
 `;
 
+// Applies a reference solution: removes the paths listed in delete.txt, then
+// copies files/ over the project.
+const SOLVE_SH = `#!/bin/bash
+set -euo pipefail
+if [ -f /solution/delete.txt ]; then
+  while IFS= read -r path; do
+    [ -n "$path" ] && rm -rf "/app/$path"
+  done < /solution/delete.txt
+fi
+if [ -d /solution/files ]; then
+  cp -R /solution/files/. /app/
+fi
+`;
+
+export function hasSolution(skill, id) {
+  return existsSync(join(evalsDir, skill, 'solutions', id));
+}
+
 const TEST_SH = `#!/bin/bash
 # Verifier entry point: grades the project in /app and writes
 # /logs/verifier/reward.json.
@@ -110,8 +139,10 @@ python3 /tests/grader.py
 `;
 
 // Writes the Harbor tasks for one skill and returns their directory.
-export function buildTasks(skill, { only } = {}) {
-  const skillTasksDir = join(tasksDir, skill);
+export function buildTasks(skill, { only, group } = {}) {
+  // `group` keeps tasks generated for another purpose (verification) apart
+  // from the ones a live run is using.
+  const skillTasksDir = group ? join(tasksDir, group, skill) : join(tasksDir, skill);
   rmSync(skillTasksDir, { recursive: true, force: true });
   for (const item of loadCases(skill)) {
     if (only && !only.includes(item.id)) continue;
@@ -126,6 +157,11 @@ export function buildTasks(skill, { only } = {}) {
     chmodSync(join(taskDir, 'tests', 'test.sh'), 0o755);
     cpSync(join(evalsDir, 'grader.py'), join(taskDir, 'tests', 'grader.py'));
     writeFileSync(join(taskDir, 'tests', 'case.json'), `${JSON.stringify(item, null, 2)}\n`);
+    if (hasSolution(skill, item.id)) {
+      cpSync(join(evalsDir, skill, 'solutions', item.id), join(taskDir, 'solution'), { recursive: true });
+      writeFileSync(join(taskDir, 'solution', 'solve.sh'), SOLVE_SH);
+      chmodSync(join(taskDir, 'solution', 'solve.sh'), 0o755);
+    }
   }
   return skillTasksDir;
 }

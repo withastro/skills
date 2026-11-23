@@ -21,6 +21,8 @@
 //   --attempts <n>       Attempts per case and arm (default: matrix.json `attempts`)
 //   --concurrency <n>    Trials run at once (default: matrix.json `concurrency`)
 //   --check              Validate the datasets and matrix, then exit. No model calls
+//   --verify             Prove the cases with reference solutions: the solution must
+//                        score 1.0 and the untouched fixture must not. No model calls
 //   --dry-run            Generate tasks and validate each job with Harbor. No model calls
 //   --resume             Continue the last run: skip entries that finished, resume the
 //                        interrupted one, start the rest. Finished trials are kept
@@ -34,14 +36,14 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { basename, join, relative } from 'node:path';
 import { fail, loadLocalEnv, providerEnv, root } from './lib/env.mjs';
-import { buildTasks, listSkills, loadCases, tasksDir, validateSkill } from './lib/tasks.mjs';
+import { buildTasks, hasSolution, listSkills, loadCases, tasksDir, validateSkill } from './lib/tasks.mjs';
 
 const resultsDir = join(root, '.eval-results');
 const matrix = JSON.parse(readFileSync(join(root, 'evals', 'matrix.json'), 'utf8'));
-const METRICS = ['file_checks', 'astro_build', 'reward'];
+const METRICS = ['file_checks', 'output_checks', 'astro_build', 'reward'];
 
 function parseArgs(argv) {
-  const options = { check: false, dryRun: false, resume: false, summaryOnly: false, strict: false };
+  const options = { check: false, dryRun: false, resume: false, summaryOnly: false, strict: false, verify: false };
   const list = (value) => value.split(',').map((item) => item.trim()).filter(Boolean);
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -57,6 +59,7 @@ function parseArgs(argv) {
     else if (arg === '--attempts') options.attempts = Number(value());
     else if (arg === '--concurrency') options.concurrency = Number(value());
     else if (arg === '--check') options.check = true;
+    else if (arg === '--verify') options.verify = true;
     else if (arg === '--dry-run') options.dryRun = true;
     else if (arg === '--resume') options.resume = true;
     else if (arg === '--summary-only') options.summaryOnly = true;
@@ -308,8 +311,8 @@ function summarise(skills, entries, statuses) {
   for (const skill of skills) {
     summary[skill] = {};
     lines.push(`## ${skill}`, '');
-    lines.push('| Entry | Agent | Model | Effort | Tier | File checks | Astro build | Trials (errors) | Input tokens | Seconds | Skill loaded: expected / not expected | Status |');
-    lines.push('| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |');
+    lines.push('| Entry | Agent | Model | Effort | Tier | File checks | Output checks | Astro build | Trials (errors) | Input tokens | Seconds | Skill loaded: expected / not expected | Status |');
+    lines.push('| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |');
     for (const entry of entries) {
       const scores = scoreEntry(skill, entry);
       const status = statuses.get(`${skill}/${entry.id}`);
@@ -326,6 +329,7 @@ function summarise(skills, entries, statuses) {
           entry.effort ?? 'default',
           entry.tier,
           formatScore(scores?.metrics.file_checks),
+          formatScore(scores?.metrics.output_checks),
           formatScore(scores?.metrics.astro_build),
           trials,
           formatPair(scores?.without_skill.input_tokens, scores?.with_skill.input_tokens, thousands),
@@ -335,7 +339,7 @@ function summarise(skills, entries, statuses) {
         ].join(' | ')} |`,
       );
       if (entry.tier === 'frontier') {
-        for (const metric of ['file_checks', 'astro_build']) {
+        for (const metric of ['file_checks', 'output_checks', 'astro_build']) {
           const delta = scores?.metrics[metric]?.delta;
           if (typeof delta === 'number' && delta < -tolerance) regressions.push(`${skill} / ${entry.id}: ${metric} ${delta.toFixed(2)}`);
         }
@@ -345,7 +349,7 @@ function summarise(skills, entries, statuses) {
   }
 
   lines.push('Score, token and time cells show without-skill → with-skill. Scores are 0-1, averaged over attempts and then over cases.');
-  lines.push('File checks and Astro build are deterministic, so every row is comparable.');
+  lines.push('File checks, output checks and Astro build are deterministic, so every row is comparable. Each is averaged over the cases that have it.');
   lines.push('Trials are baseline + with-skill; tokens and seconds are per-trial means.');
   lines.push('Skill loaded is the share of with-skill trials in which the agent loaded the skill, for cases where it should and for cases where it should not. It is read from recorded tool calls and is a heuristic.');
   lines.push('');
@@ -369,6 +373,86 @@ if (problems.length > 0) fail(`Invalid eval configuration:\n${problems.map((prob
 if (options.check) {
   console.log(`OK: ${skills.map((skill) => `${skill} (${loadCases(skill).length} cases)`).join(', ')}; ${matrix.entries.length} matrix entries`);
   process.exit(0);
+}
+
+// Runs every case that has a reference solution with Harbor's oracle agent
+// (applies the solution) and its no-op agent (changes nothing). A sound case
+// scores 1.0 for the first and less for the second.
+function verifyCases(skill) {
+  const selected = selectCases(skill, options);
+  const withSolution = selected.filter((id) => hasSolution(skill, id));
+  const without = selected.filter((id) => !hasSolution(skill, id));
+  console.log(`\n== ${skill}: verifying ${withSolution.length} case(s) with a reference solution`);
+  if (withSolution.length === 0) return { ok: true, without };
+
+  const tasksPath = buildTasks(skill, { only: withSolution, group: '_verify' });
+  const verifyDir = join(resultsDir, '_verify', skill);
+  mkdirSync(verifyDir, { recursive: true });
+  const jobName = new Date().toISOString().replace(/[-:]/g, '').replace(/\..*/, '');
+  const job = {
+    job_name: jobName,
+    jobs_dir: relative(root, verifyDir),
+    n_attempts: 1,
+    n_concurrent_trials: options.concurrency ?? matrix.concurrency,
+    agents: [{ name: 'oracle' }, { name: 'nop' }],
+    datasets: [{ path: relative(root, tasksPath) }],
+  };
+  const jobFile = join(verifyDir, 'job.json');
+  writeFileSync(jobFile, `${JSON.stringify(job, null, 2)}\n`);
+  const run = spawnSync('harbor', ['run', '--config', relative(root, jobFile), '--yes', '--quiet'], {
+    cwd: root,
+    env: providerEnv({}),
+    stdio: ['ignore', 'ignore', 'inherit'],
+  });
+  if (run.error) fail(run.error.message);
+
+  const results = new Map(withSolution.map((id) => [id, {}]));
+  const jobDir = join(verifyDir, jobName);
+  for (const name of existsSync(jobDir) ? readdirSync(jobDir) : []) {
+    const result = readJson(join(jobDir, name, 'result.json'));
+    if (!result?.config?.agent) continue;
+    const entry = results.get(basename(result.task_id?.path ?? ''));
+    if (!entry) continue;
+    entry[result.config.agent.name] = {
+      rewards: result.verifier_result?.rewards,
+      error: result.exception_info?.exception_type,
+      details: readJson(join(jobDir, name, 'verifier', 'details.json')),
+    };
+  }
+
+  let ok = true;
+  const failedChecks = (details) =>
+    ['file_checks', 'output_checks']
+      .flatMap((kind) => details?.[kind]?.checks ?? [])
+      .filter((check) => !check.passed)
+      .map((check) => `${check.id}: ${check.reason}`);
+  for (const [id, { oracle, nop }] of results) {
+    const solved = oracle?.rewards && Object.values(oracle.rewards).every((score) => score === 1);
+    const startFails = nop?.rewards && nop.rewards.reward < 1;
+    const problems = [];
+    if (!solved) {
+      problems.push(`solution scores ${JSON.stringify(oracle?.rewards ?? oracle?.error ?? 'nothing')}`);
+      problems.push(...failedChecks(oracle?.details));
+      if (oracle?.details?.astro_build?.score === 0) problems.push(oracle.details.astro_build.reason.slice(-400));
+    }
+    if (!startFails) problems.push(`untouched fixture scores ${JSON.stringify(nop?.rewards ?? nop?.error ?? 'nothing')}; the case does not test anything`);
+    console.log(`${problems.length === 0 ? 'ok  ' : 'FAIL'} ${id}${nop?.rewards ? ` (untouched fixture: ${nop.rewards.reward.toFixed(2)})` : ''}`);
+    for (const problem of problems) console.log(`       ${problem}`);
+    if (problems.length > 0) ok = false;
+  }
+  return { ok, without };
+}
+
+if (options.verify) {
+  let ok = true;
+  const unverified = [];
+  for (const skill of skills) {
+    const result = verifyCases(skill);
+    ok &&= result.ok;
+    unverified.push(...result.without.map((id) => `${skill}/${id}`));
+  }
+  if (unverified.length > 0) console.log(`\nNo reference solution, not verified: ${unverified.join(', ')}`);
+  process.exit(ok ? 0 : 1);
 }
 
 const entries = options.only ? matrix.entries.filter((entry) => options.only.includes(entry.id)) : matrix.entries;

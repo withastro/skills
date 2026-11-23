@@ -17,6 +17,7 @@
     "check:tier2": "node scripts/dedup.mjs",
     "check:harness": "for skill in skills/*/; do skillevaluator harness-check \"$skill\"; done",
     "eval:check": "node scripts/eval-matrix.mjs --check",
+    "eval:verify": "node scripts/eval-matrix.mjs --verify",
     "eval:dry": "node scripts/eval-matrix.mjs --dry-run",
     "eval": "node scripts/eval-matrix.mjs",
     "eval:summary": "node scripts/eval-matrix.mjs --summary-only"

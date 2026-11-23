@@ -19,6 +19,10 @@ run = "npm run -s validate"
 description = "Validate the eval cases, fixtures and model matrix"
 run = "npm run -s eval:check"
 
+[tasks."eval:verify"]
+description = "Prove the eval cases with reference solutions in containers (no model calls)"
+run = "node scripts/eval-matrix.mjs --verify"
+
 [tasks."check:harness"]
 description = "Show whether each agent harness loads the skills"
 run = "npm run -s check:harness"
