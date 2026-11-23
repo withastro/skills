@@ -158,6 +158,10 @@ node scripts/eval-matrix.mjs --skill astro-best-practices --case legacy-project-
 # Everything
 node scripts/eval-matrix.mjs --strict
 
+# After changing a skill, rerun only the with-skill arm; the summary pairs it
+# with the baseline already on disk
+node scripts/eval-matrix.mjs --skill starlight-best-practices --arm with
+
 # Continue after an interruption: finished entries are skipped, the interrupted
 # one is resumed with its finished trials kept, the rest start fresh
 node scripts/eval-matrix.mjs --resume

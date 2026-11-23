@@ -20,6 +20,9 @@
 //   --max-cases <n>      Run only the first n cases (smoke run; not release evidence)
 //   --attempts <n>       Attempts per case and arm (default: matrix.json `attempts`)
 //   --concurrency <n>    Trials run at once (default: matrix.json `concurrency`)
+//   --arm <with|without> Run only one arm. Use `--arm with` after changing a skill: the
+//                        baseline does not depend on the skill, so earlier baseline
+//                        results are reused in the summary
 //   --check              Validate the datasets and matrix, then exit. No model calls
 //   --verify             Prove the cases with reference solutions: the solution must
 //                        score 1.0 and the untouched fixture must not. No model calls
@@ -60,7 +63,10 @@ function parseArgs(argv) {
     else if (arg === '--max-cases') options.maxCases = Number(value());
     else if (arg === '--attempts') options.attempts = Number(value());
     else if (arg === '--concurrency') options.concurrency = Number(value());
-    else if (arg === '--check') options.check = true;
+    else if (arg === '--arm') {
+      options.arm = value();
+      if (!['with', 'without'].includes(options.arm)) fail('--arm must be "with" or "without"');
+    } else if (arg === '--check') options.check = true;
     else if (arg === '--verify') options.verify = true;
     else if (arg === '--dry-run') options.dryRun = true;
     else if (arg === '--resume') options.resume = true;
@@ -173,14 +179,17 @@ function runEntry(skill, entry, tasksPath, options) {
     jobs_dir: relative(root, entryDir),
     n_attempts: options.attempts ?? matrix.attempts,
     n_concurrent_trials: options.concurrency ?? matrix.concurrency,
-    // The first agent is the with-skill arm, the second the baseline.
-    agents: [agentConfig(entry, skill), agentConfig(entry)],
+    // The with-skill arm, then the baseline, unless --arm selects one.
+    agents: [
+      ...(options.arm === 'without' ? [] : [agentConfig(entry, skill)]),
+      ...(options.arm === 'with' ? [] : [agentConfig(entry)]),
+    ],
     datasets: [{ path: relative(root, tasksPath) }],
   };
   const jobFile = join(entryDir, 'job.json');
   writeFileSync(jobFile, `${JSON.stringify(job, null, 2)}\n`);
   if (!options.dryRun) {
-    const meta = { ...sourceState(), started_at: new Date().toISOString(), attempts: job.n_attempts, partial: Boolean(options.cases || options.maxCases) };
+    const meta = { ...sourceState(), started_at: new Date().toISOString(), attempts: job.n_attempts, arm: options.arm ?? 'both', partial: Boolean(options.cases || options.maxCases) };
     writeFileSync(join(entryDir, `${jobName}.meta.json`), `${JSON.stringify(meta, null, 2)}\n`);
   }
 
@@ -234,8 +243,8 @@ function jobDirs(skill, entry) {
 }
 
 // Trials for one entry, or undefined when there are none. Runs can cover
-// different cases (--case, --max-cases), so each case is taken from the newest
-// job that ran it; older trials of that case are ignored.
+// different cases (--case, --max-cases) and arms (--arm), so each case and arm
+// is taken from the newest job that ran it; older trials of it are ignored.
 function readTrials(skill, entry) {
   const jobs = jobDirs(skill, entry);
   if (jobs.length === 0) return undefined;
@@ -244,18 +253,18 @@ function readTrials(skill, entry) {
   for (const jobDir of jobs) {
     const fromJob = new Map();
     for (const trial of readJobTrials(jobDir, skill)) {
-      fromJob.set(trial.caseId, [...(fromJob.get(trial.caseId) ?? []), trial]);
+      const slot = `${trial.caseId}\n${trial.withSkill}`;
+      fromJob.set(slot, [...(fromJob.get(slot) ?? []), trial]);
     }
-    for (const [caseId, trials] of fromJob) {
-      byCase.set(caseId, trials);
-      byCaseJob.set(caseId, jobDir);
+    for (const [slot, trials] of fromJob) {
+      byCase.set(slot, trials);
+      byCaseJob.set(slot, jobDir);
     }
   }
   // The jobs that still contribute a case, for provenance.
   const used = new Set();
   for (const jobDir of jobs) {
-    const cases = new Set(readJobTrials(jobDir, skill).map((trial) => trial.caseId));
-    if ([...cases].some((caseId) => byCaseJob.get(caseId) === jobDir)) used.add(jobDir);
+    if ([...byCaseJob.values()].includes(jobDir)) used.add(jobDir);
   }
   return { jobDir: jobs.at(-1), jobs: jobs.length, usedJobs: [...used], trials: [...byCase.values()].flat() };
 }
