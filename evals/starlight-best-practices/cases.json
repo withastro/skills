@@ -301,6 +301,153 @@
       ]
     },
     {
+      "id": "base-link",
+      "fixture": "starlight-base",
+      "should_trigger": true,
+      "prompt": "On the home page of this Starlight site, add a sentence at the end that links the words \"install guide\" to the Install page.",
+      "expected_output": "The built home page has a link with the text \"install guide\" that resolves to the Install page under the site's /docs base path.",
+      "assertions": [
+        "The link works with the configured `base` of `/docs`: it is written as `/docs/guides/install/` or as a relative link.",
+        "The link text is \"install guide\"."
+      ],
+      "output_checks": [
+        {
+          "id": "link-resolves-under-base",
+          "path": "index.html",
+          "contains": [
+            "<a[^>]+href=\"(/docs/guides/install/?|(\\./)?guides/install/?)\"[^>]*>\\s*install guide"
+          ]
+        },
+        {
+          "id": "no-link-outside-base",
+          "path": "index.html",
+          "not_contains": [
+            "href=\"/guides/install"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "tabs-in-markdown",
+      "fixture": "starlight-basic",
+      "should_trigger": true,
+      "prompt": "In this Starlight site, add tabs to the install guide that show the install command for npm (`npm install example`) and for pnpm (`pnpm add example`).",
+      "expected_output": "The built install guide renders a tab group with an npm tab and a pnpm tab containing the two commands.",
+      "assertions": [
+        "The page uses Starlight's `Tabs` and `TabItem` components, which requires the file to be MDX.",
+        "No import statement is rendered as text on the page."
+      ],
+      "output_checks": [
+        {
+          "id": "tabs-rendered",
+          "path": "guides/install/index.html",
+          "contains": [
+            "<starlight-tabs",
+            "npm install example",
+            "pnpm add example"
+          ]
+        },
+        {
+          "id": "no-import-text",
+          "path": "guides/install/index.html",
+          "not_contains": [
+            "import\\s*\\{\\s*Tabs"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "single-h1",
+      "fixture": "starlight-basic",
+      "should_trigger": true,
+      "prompt": "In this Starlight site, add a new guide page titled \"Configuration\" at /guides/configuration/ with a one-sentence introduction and two sections, \"Options\" and \"Examples\", each with a sentence of placeholder text. Add it to the Guides group in the sidebar.",
+      "expected_output": "The built Configuration page has one top-level heading, the two sections as second-level headings, and a link in the Guides sidebar group.",
+      "assertions": [
+        "The page body does not repeat the title as a `#` heading; Starlight renders the frontmatter title as the page's `<h1>`.",
+        "\"Options\" and \"Examples\" are `##` headings.",
+        "The sidebar's Guides group links to the page."
+      ],
+      "file_checks": [
+        {
+          "id": "sidebar-entry",
+          "path": "astro.config.*",
+          "contains": [
+            "guides/configuration"
+          ]
+        }
+      ],
+      "output_checks": [
+        {
+          "id": "sections",
+          "path": "guides/configuration/index.html",
+          "contains": [
+            "<h2[^>]*>[\\s\\S]{0,200}Options",
+            "<h2[^>]*>[\\s\\S]{0,200}Examples"
+          ]
+        },
+        {
+          "id": "one-h1",
+          "path": "guides/configuration/index.html",
+          "contains": [
+            "<h1"
+          ],
+          "not_contains": [
+            "<h1[\\s\\S]*<h1"
+          ]
+        },
+        {
+          "id": "sidebar-link",
+          "path": "index.html",
+          "contains": [
+            "href=\"/guides/configuration/\""
+          ]
+        }
+      ]
+    },
+    {
+      "id": "add-locale",
+      "fixture": "starlight-basic",
+      "should_trigger": true,
+      "prompt": "In this Starlight site, add a German version of the home page with the title \"Beispiel-Doku\" and the text \"Willkommen in der Beispiel-Dokumentation.\" Keep English as the default language at the current URLs.",
+      "expected_output": "The German home page is built at /de/ and is marked as German, and the English pages stay at their current URLs marked as English.",
+      "assertions": [
+        "The Starlight config declares `locales` with English as the root locale and German under `de`.",
+        "The German page is at `src/content/docs/de/index.md` or `.mdx`.",
+        "The built /de/ page has `lang=\"de\"`."
+      ],
+      "file_checks": [
+        {
+          "id": "locales-configured",
+          "path": "astro.config.*",
+          "contains": [
+            "locales\\s*:",
+            "root\\s*:"
+          ]
+        }
+      ],
+      "output_checks": [
+        {
+          "id": "german-page",
+          "path": "de/index.html",
+          "contains": [
+            "<html[^>]*\\slang=\"de\"",
+            "Willkommen in der Beispiel-Dokumentation"
+          ]
+        },
+        {
+          "id": "english-at-root",
+          "path": "index.html",
+          "contains": [
+            "<html[^>]*\\slang=\"en\""
+          ]
+        },
+        {
+          "id": "english-urls-kept",
+          "path": "guides/install/index.html"
+        }
+      ]
+    },
+    {
       "id": "negative-plain-astro",
       "prompt": "In this Astro site, add an About page at /about/ with a heading and one paragraph describing the blog.",
       "fixture": "astro-blog",
