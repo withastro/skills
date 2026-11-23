@@ -1,0 +1,31 @@
+# Fast structural checks that need no model key: the Agent Skills reference
+# validator, the eval dataset contract, and the shared grader copies.
+name: Validate
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - uses: astral-sh/setup-uv@v10.4.0
+      - name: Validate skills against the Agent Skills specification
+        run: |
+          for skill in skills/*/; do
+            uvx --python 3.13 --from skills-ref==0.1.1 agentskills validate "$skill"
+          done
+      - name: Check grader copies are in sync
+        run: node scripts/sync-grader.mjs --check
+      - name: Validate eval datasets
+        run: |
+          uv tool install --python 3.13 "skillevaluator[all]==1.0.1"
+          for skill in skills/*/; do
+            skillevaluator tier3 validate "$skill" --strict
+          done
