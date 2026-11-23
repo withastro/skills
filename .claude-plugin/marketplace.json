@@ -1,0 +1,20 @@
+{
+  "$schema": "https://code.claude.com/schemas/marketplace.json",
+  "name": "astro",
+  "description": "Official Astro skills for building and reviewing Astro and Starlight projects.",
+  "owner": {
+    "name": "Astro",
+    "url": "https://astro.build"
+  },
+  "plugins": [
+    {
+      "name": "astro",
+      "source": "./",
+      "description": "Best-practice skills for Astro and Starlight, plus the Astro docs MCP server.",
+      "homepage": "https://docs.astro.build/en/guides/build-with-ai/",
+      "repository": "https://github.com/withastro/skills",
+      "license": "MIT",
+      "keywords": ["astro", "starlight", "content-collections", "islands", "docs"]
+    }
+  ]
+}
