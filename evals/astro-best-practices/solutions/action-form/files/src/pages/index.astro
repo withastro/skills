@@ -1,0 +1,23 @@
+---
+import { actions } from 'astro:actions';
+import Layout from '../layouts/Layout.astro';
+
+export const prerender = false;
+
+const result = Astro.getActionResult(actions.subscribe);
+---
+
+<Layout title="Home">
+  <h1>Welcome</h1>
+  <p>A small site built with Astro.</p>
+
+  <form method="POST" action={actions.subscribe}>
+    <label>
+      Email
+      <input type="email" name="email" required />
+    </label>
+    <button>Subscribe</button>
+  </form>
+  {result?.data && <p>{result.data.message}</p>}
+  {result?.error && <p>Please enter a valid email address.</p>}
+</Layout>
