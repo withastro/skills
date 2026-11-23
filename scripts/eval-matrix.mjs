@@ -22,6 +22,8 @@
 //   --concurrency <n>    Trials run at once (default: matrix.json `concurrency`)
 //   --check              Validate the datasets and matrix, then exit. No model calls
 //   --dry-run            Generate tasks and validate each job with Harbor. No model calls
+//   --resume             Continue the last run: skip entries that finished, resume the
+//                        interrupted one, start the rest. Finished trials are kept
 //   --summary-only       Skip running; summarise results already in .eval-results/
 //   --strict             Exit 1 when a frontier entry regresses beyond the tolerance
 //
@@ -32,14 +34,14 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { basename, join, relative } from 'node:path';
 import { fail, loadLocalEnv, providerEnv, root } from './lib/env.mjs';
-import { buildTasks, listSkills, loadCases, validateSkill } from './lib/tasks.mjs';
+import { buildTasks, listSkills, loadCases, tasksDir, validateSkill } from './lib/tasks.mjs';
 
 const resultsDir = join(root, '.eval-results');
 const matrix = JSON.parse(readFileSync(join(root, 'evals', 'matrix.json'), 'utf8'));
 const METRICS = ['file_checks', 'astro_build', 'reward'];
 
 function parseArgs(argv) {
-  const options = { check: false, dryRun: false, summaryOnly: false, strict: false };
+  const options = { check: false, dryRun: false, resume: false, summaryOnly: false, strict: false };
   const list = (value) => value.split(',').map((item) => item.trim()).filter(Boolean);
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -56,6 +58,7 @@ function parseArgs(argv) {
     else if (arg === '--concurrency') options.concurrency = Number(value());
     else if (arg === '--check') options.check = true;
     else if (arg === '--dry-run') options.dryRun = true;
+    else if (arg === '--resume') options.resume = true;
     else if (arg === '--summary-only') options.summaryOnly = true;
     else if (arg === '--strict') options.strict = true;
     else fail(`Unknown option: ${arg}`);
@@ -104,11 +107,47 @@ function agentConfig(entry, skill) {
   };
 }
 
+// Newest Harbor job directory for one entry, or undefined.
+function latestJobDir(skill, entry) {
+  const entryDir = join(resultsDir, skill, entry.id);
+  if (!existsSync(entryDir)) return undefined;
+  return readdirSync(entryDir)
+    .map((name) => join(entryDir, name))
+    .filter((path) => statSync(path).isDirectory() && existsSync(join(path, 'config.json')))
+    .sort()
+    .at(-1);
+}
+
+// Whether every trial of a job has finished, with a score or an error.
+function jobFinished(jobDir) {
+  const result = readJson(join(jobDir, 'result.json'));
+  const stats = result?.stats;
+  if (!stats || !result.n_total_trials) return false;
+  const done = (stats.n_completed_trials ?? 0) + (stats.n_errored_trials ?? 0) - (stats.n_cancelled_trials ?? 0);
+  return done >= result.n_total_trials && !stats.n_running_trials && !stats.n_pending_trials;
+}
+
 function runEntry(skill, entry, tasksPath, options) {
   const hasKey = Boolean(process.env[entry.key]);
   if (!hasKey && !options.dryRun) {
     console.log(`\n== ${skill} / ${entry.id}: skipped, missing ${entry.key}`);
     return { status: 'skipped', reason: `missing ${entry.key}` };
+  }
+
+  const previous = options.resume && !options.dryRun ? latestJobDir(skill, entry) : undefined;
+  if (previous && jobFinished(previous)) {
+    console.log(`\n== ${skill} / ${entry.id}: already finished (${relative(root, previous)})`);
+    return { status: 'completed', reason: 'kept from the previous run' };
+  }
+  if (previous) {
+    // Harbor keeps the trials that finished and runs the rest. The job keeps the
+    // attempts, cases and concurrency it was started with.
+    const args = ['job', 'resume', '--job-path', relative(root, previous), '--filter-error-type', 'CancelledError'];
+    console.log(`\n== ${skill} / ${entry.id}: resuming`);
+    console.log(`harbor ${args.join(' ')}`);
+    const run = spawnSync('harbor', args, { cwd: root, env: providerEnv({ [entry.key]: process.env[entry.key] }), stdio: 'inherit' });
+    if (run.error) return { status: 'error', reason: run.error.message };
+    return { status: run.status === 0 ? 'completed' : 'failed', reason: 'resumed' };
   }
 
   const entryDir = join(resultsDir, skill, entry.id);
@@ -167,13 +206,7 @@ function skillLoaded(trialDir, skill) {
 
 // Trials of the newest job for one entry, or undefined when there is none.
 function readTrials(skill, entry) {
-  const entryDir = join(resultsDir, skill, entry.id);
-  if (!existsSync(entryDir)) return undefined;
-  const jobs = readdirSync(entryDir)
-    .map((name) => join(entryDir, name))
-    .filter((path) => statSync(path).isDirectory() && existsSync(join(path, 'config.json')))
-    .sort();
-  const jobDir = jobs.at(-1);
+  const jobDir = latestJobDir(skill, entry);
   if (!jobDir) return undefined;
 
   const trials = [];
@@ -344,7 +377,10 @@ if (entries.length === 0) fail('No matrix entries selected.');
 const statuses = new Map();
 if (!options.summaryOnly) {
   for (const skill of skills) {
-    const tasksPath = buildTasks(skill, { only: selectCases(skill, options) });
+    // A resumed job must find the tasks it was started with, so keep them if present.
+    const existingTasks = join(tasksDir, skill);
+    const tasksPath =
+      options.resume && existsSync(existingTasks) ? existingTasks : buildTasks(skill, { only: selectCases(skill, options) });
     for (const entry of entries) statuses.set(`${skill}/${entry.id}`, runEntry(skill, entry, tasksPath, options));
   }
 }

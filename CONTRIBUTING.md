@@ -137,9 +137,15 @@ node scripts/eval-matrix.mjs --skill astro-best-practices --case legacy-project-
 # Everything
 node scripts/eval-matrix.mjs --strict
 
+# Continue after an interruption: finished entries are skipped, the interrupted
+# one is resumed with its finished trials kept, the rest start fresh
+node scripts/eval-matrix.mjs --resume
+
 # Rebuild the summary from results already on disk
 pnpm eval:summary
 ```
+
+Without `--resume`, a new run starts every entry from scratch. A resumed entry keeps the attempts, cases and concurrency it was started with; `--concurrency` only affects entries that had not started yet.
 
 With mise, pass options after `--`: `mise run eval -- --only codex-luna --max-cases 2`.
 
