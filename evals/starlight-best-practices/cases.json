@@ -461,7 +461,14 @@
       "file_checks": [
         {
           "id": "about-page",
-          "path": "src/pages/about.*"
+          "any_of": [
+            {
+              "path": "src/pages/about.*"
+            },
+            {
+              "path": "src/pages/about/index.*"
+            }
+          ]
         },
         {
           "id": "no-starlight",
