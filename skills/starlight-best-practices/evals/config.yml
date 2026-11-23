@@ -1,0 +1,17 @@
+schema_version: 1
+
+harbor:
+  task_source: evals_json
+  n_attempts: 3
+  pass_threshold: 0.6
+  n_concurrent: 2
+  timeout_multiplier: 1.5
+  resources:
+    cpus: 2
+    memory_mb: 4096
+
+skill_workspace:
+  mode: isolated
+
+grading:
+  mode: default_plus_custom
