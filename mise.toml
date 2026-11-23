@@ -1,0 +1,54 @@
+# Tools and tasks for this repository. Run `mise install` once, then
+# `mise run <task>` (or `mise tasks` to list them).
+
+[tools]
+node = "22"
+pnpm = "12"
+uv = "latest"
+"aqua:gitleaks/gitleaks" = "8.30.1"
+# SkillEvaluator with all three tiers; needs Python 3.12-3.14.
+"pipx:skillevaluator" = { version = "1.0.1", extras = "all", uvx_args = "--python 3.13" }
+
+[env]
+# Provider keys for live evaluations, if the file exists (see .env.example).
+_.file = { path = ".env.local", redact = true }
+
+[tasks.validate]
+description = "Validate each skill against the Agent Skills specification"
+run = "npm run -s validate"
+
+[tasks."eval:validate"]
+description = "Validate each eval dataset, config, grader and Dockerfile"
+run = "npm run -s eval:validate"
+
+[tasks."check:grader"]
+description = "Confirm each skill's grader copy matches scripts/grader.py"
+run = "npm run -s check:grader"
+
+[tasks."check:harness"]
+description = "Show whether each agent harness loads the skills"
+run = "npm run -s check:harness"
+
+[tasks."check:tier1"]
+description = "SkillEvaluator Tier 1: quality score and security scan"
+run = "npm run -s check:tier1"
+
+[tasks."check:tier2"]
+description = "SkillEvaluator Tier 2: repeated content and overlap between skills (calls a model provider)"
+run = "node scripts/dedup.mjs"
+
+[tasks.check]
+description = "All checks that need no model key"
+depends = ["validate", "eval:validate", "check:grader", "check:tier1"]
+
+[tasks."eval:dry"]
+description = "Print the live-evaluation commands without running them"
+run = "node scripts/eval-matrix.mjs --dry-run"
+
+[tasks.eval]
+description = "Run live evaluations (calls model providers; costs money). Pass options after --"
+run = "node scripts/eval-matrix.mjs"
+
+[tasks."eval:summary"]
+description = "Rebuild the evaluation summary from results on disk"
+run = "node scripts/eval-matrix.mjs --summary-only"
