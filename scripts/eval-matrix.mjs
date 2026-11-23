@@ -28,6 +28,8 @@
 //                        interrupted one, start the rest. Finished trials are kept
 //   --summary-only       Skip running; summarise results already in .eval-results/
 //   --strict             Exit 1 when a frontier entry regresses beyond the tolerance
+//   --record             Save the summary to evals/results/<date>-<commit>/ and update the
+//                        README. Only for clean, full runs made at the current commit
 //
 // Entries whose key is not set are skipped and reported as such.
 // Live runs call model providers and cost money; see CONTRIBUTING.md.
@@ -43,7 +45,7 @@ const matrix = JSON.parse(readFileSync(join(root, 'evals', 'matrix.json'), 'utf8
 const METRICS = ['file_checks', 'output_checks', 'astro_build', 'reward'];
 
 function parseArgs(argv) {
-  const options = { check: false, dryRun: false, resume: false, summaryOnly: false, strict: false, verify: false };
+  const options = { check: false, dryRun: false, record: false, resume: false, summaryOnly: false, strict: false, verify: false };
   const list = (value) => value.split(',').map((item) => item.trim()).filter(Boolean);
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -64,6 +66,7 @@ function parseArgs(argv) {
     else if (arg === '--resume') options.resume = true;
     else if (arg === '--summary-only') options.summaryOnly = true;
     else if (arg === '--strict') options.strict = true;
+    else if (arg === '--record') options.record = true;
     else fail(`Unknown option: ${arg}`);
   }
   return options;
@@ -96,6 +99,21 @@ function selectCases(skill, options) {
   }
   if (options.maxCases) ids = ids.slice(0, options.maxCases);
   return ids;
+}
+
+function git(...args) {
+  const run = spawnSync('git', args, { cwd: root, encoding: 'utf8' });
+  return run.status === 0 ? run.stdout.trim() : '';
+}
+
+// The commit the skills, cases and scripts are at, and whether any of them
+// has uncommitted changes. Stored with each job so a recorded result can be
+// tied to exactly what was tested.
+function sourceState() {
+  return {
+    commit: git('rev-parse', 'HEAD'),
+    dirty: git('status', '--porcelain', '--', 'skills', 'evals', 'scripts') !== '',
+  };
 }
 
 function agentConfig(entry, skill) {
@@ -161,6 +179,10 @@ function runEntry(skill, entry, tasksPath, options) {
   };
   const jobFile = join(entryDir, 'job.json');
   writeFileSync(jobFile, `${JSON.stringify(job, null, 2)}\n`);
+  if (!options.dryRun) {
+    const meta = { ...sourceState(), started_at: new Date().toISOString(), partial: Boolean(options.cases || options.maxCases) };
+    writeFileSync(join(entryDir, `${jobName}.meta.json`), `${JSON.stringify(meta, null, 2)}\n`);
+  }
 
   const args = ['run', '--config', relative(root, jobFile), '--yes'];
   if (options.dryRun) args.push('--dry-run');
@@ -218,14 +240,24 @@ function readTrials(skill, entry) {
   const jobs = jobDirs(skill, entry);
   if (jobs.length === 0) return undefined;
   const byCase = new Map();
+  const byCaseJob = new Map();
   for (const jobDir of jobs) {
     const fromJob = new Map();
     for (const trial of readJobTrials(jobDir, skill)) {
       fromJob.set(trial.caseId, [...(fromJob.get(trial.caseId) ?? []), trial]);
     }
-    for (const [caseId, trials] of fromJob) byCase.set(caseId, trials);
+    for (const [caseId, trials] of fromJob) {
+      byCase.set(caseId, trials);
+      byCaseJob.set(caseId, jobDir);
+    }
   }
-  return { jobDir: jobs.at(-1), jobs: jobs.length, trials: [...byCase.values()].flat() };
+  // The jobs that still contribute a case, for provenance.
+  const used = new Set();
+  for (const jobDir of jobs) {
+    const cases = new Set(readJobTrials(jobDir, skill).map((trial) => trial.caseId));
+    if ([...cases].some((caseId) => byCaseJob.get(caseId) === jobDir)) used.add(jobDir);
+  }
+  return { jobDir: jobs.at(-1), jobs: jobs.length, usedJobs: [...used], trials: [...byCase.values()].flat() };
 }
 
 function readJobTrials(jobDir, skill) {
@@ -237,6 +269,7 @@ function readJobTrials(jobDir, skill) {
     const started = Date.parse(result.agent_execution?.started_at);
     const finished = Date.parse(result.agent_execution?.finished_at);
     trials.push({
+      agentVersion: result.agent_info?.version,
       caseId: basename(result.task_id?.path ?? ''),
       withSkill: (result.config.agent.skills ?? []).length > 0,
       rewards: result.verifier_result?.rewards,
@@ -303,6 +336,9 @@ function scoreEntry(skill, entry) {
   return {
     job: relative(root, data.jobDir),
     jobs: data.jobs,
+    used_jobs: data.usedJobs.map((jobDir) => relative(root, jobDir)),
+    agent_versions: [...new Set(data.trials.map((trial) => trial.agentVersion).filter(Boolean))],
+    scored_trials: data.trials.filter((trial) => trial.rewards).length,
     cases: new Set(data.trials.map((trial) => trial.caseId)).size,
     metrics,
     with_skill: usage(arm(true)),
@@ -380,6 +416,101 @@ function summarise(skills, entries, statuses) {
     lines.push('');
   }
   return { text: lines.join('\n'), regressions, summary };
+}
+
+// Saves the summary as a committed record. Refuses unless every result comes
+// from a full run of all cases, started at the current commit with no
+// uncommitted changes, so the record states exactly what was measured.
+function record(skills, entries, summary, text) {
+  const state = sourceState();
+  const problems = [];
+  if (state.dirty) problems.push('skills/, evals/ or scripts/ have uncommitted changes');
+  if (options.only || options.cases || options.maxCases || options.skill) {
+    problems.push('--record needs the whole matrix: remove --skill, --only, --case and --max-cases');
+  }
+  const notRun = [];
+  for (const skill of skills) {
+    const total = loadCases(skill).length;
+    for (const entry of entries) {
+      const scores = summary[skill][entry.id];
+      const name = `${skill} / ${entry.id}`;
+      if (!scores.used_jobs) {
+        notRun.push(name);
+        continue;
+      }
+      if (scores.cases < total) problems.push(`${name}: results for ${scores.cases} of ${total} cases`);
+      if (scores.scored_trials === 0) problems.push(`${name}: no scored trials`);
+      for (const jobDir of scores.used_jobs) {
+        const meta = readJson(`${join(root, jobDir)}.meta.json`);
+        if (!meta) problems.push(`${name}: ${jobDir} has no provenance file (run before --record existed)`);
+        else if (meta.commit !== state.commit) problems.push(`${name}: ${jobDir} ran at commit ${meta.commit.slice(0, 7)}, not the current ${state.commit.slice(0, 7)}`);
+        else if (meta.dirty) problems.push(`${name}: ${jobDir} ran with uncommitted changes`);
+      }
+    }
+  }
+  if (notRun.length === entries.length * skills.length) problems.push('there are no results to record');
+  if (problems.length > 0) fail(`\nNot recorded:\n${problems.map((problem) => `  ${problem}`).join('\n')}`);
+
+  const date = new Date().toISOString().slice(0, 10);
+  const name = `${date}-${state.commit.slice(0, 7)}`;
+  const recordDir = join(root, 'evals', 'results', name);
+  mkdirSync(recordDir, { recursive: true });
+  const harbor = spawnSync('harbor', ['--version'], { encoding: 'utf8' });
+  const run = {
+    recorded_at: new Date().toISOString(),
+    commit: state.commit,
+    harbor_version: harbor.status === 0 ? harbor.stdout.trim().split('\n').at(-1) : null,
+    attempts: matrix.attempts,
+    entries: entries.map((entry) => ({
+      id: entry.id,
+      agent: entry.agent,
+      model: entry.model,
+      effort: entry.effort,
+      agent_versions: [...new Set(skills.flatMap((skill) => summary[skill][entry.id].agent_versions ?? []))],
+    })),
+    not_run: notRun,
+  };
+  // Local paths are of no use to a reader of the record.
+  const published = structuredClone(summary);
+  for (const skill of skills) {
+    for (const entry of entries) {
+      delete published[skill][entry.id].job;
+      delete published[skill][entry.id].used_jobs;
+      delete published[skill][entry.id].jobs;
+      delete published[skill][entry.id].key;
+    }
+  }
+  const heading = `Recorded ${date} at commit \`${state.commit.slice(0, 7)}\` with Harbor ${run.harbor_version ?? 'unknown'}, ${matrix.attempts} attempts per case and arm.`;
+  const skipped = notRun.length > 0 ? `\nNot run: ${notRun.join(', ')}.\n` : '';
+  writeFileSync(join(recordDir, 'summary.md'), `${text.replace('# Skill evaluation matrix\n', `# Skill evaluation results\n\n${heading}\n${skipped}`)}`);
+  writeFileSync(join(recordDir, 'summary.json'), `${JSON.stringify(published, null, 2)}\n`);
+  writeFileSync(join(recordDir, 'run.json'), `${JSON.stringify(run, null, 2)}\n`);
+
+  // README: a compact table between the results markers.
+  const lines = [`${heading} Cells show the score without the skill → with it (0-1).`, ''];
+  lines.push('| Skill | Agent | Model | Effort | File checks | Output checks | Build | Skill loaded when expected |');
+  lines.push('| --- | --- | --- | --- | --- | --- | --- | --- |');
+  const cell = (metric) => (metric ? `${metric.without_skill.toFixed(2)} → ${metric.with_skill.toFixed(2)}` : 'n/a');
+  for (const skill of skills) {
+    for (const entry of entries) {
+      const scores = summary[skill][entry.id];
+      if (!scores.used_jobs) continue;
+      const loaded = scores.skill_loaded?.expected;
+      lines.push(
+        `| ${skill} | ${entry.agent} | \`${entry.model}\` | ${entry.effort ?? 'default'} | ${cell(scores.metrics.file_checks)} | ${cell(scores.metrics.output_checks)} | ${cell(scores.metrics.astro_build)} | ${loaded === undefined ? 'n/a' : `${Math.round(loaded * 100)}%`} |`,
+      );
+    }
+  }
+  lines.push('', `Full record: [\`evals/results/${name}/\`](evals/results/${name}/summary.md). How these are measured: [CONTRIBUTING.md](CONTRIBUTING.md#evaluations).`);
+  const readmePath = join(root, 'README.md');
+  const readme = readFileSync(readmePath, 'utf8');
+  const start = '<!-- results:start -->';
+  const end = '<!-- results:end -->';
+  if (readme.includes(start) && readme.includes(end)) {
+    const updated = `${readme.slice(0, readme.indexOf(start) + start.length)}\n${lines.join('\n')}\n${readme.slice(readme.indexOf(end))}`;
+    writeFileSync(readmePath, updated);
+  }
+  console.log(`\nRecorded to evals/results/${name}/ and README.md. Review the changes, then commit them.`);
 }
 
 loadLocalEnv();
@@ -499,4 +630,5 @@ writeFileSync(join(resultsDir, 'summary.md'), text);
 writeFileSync(join(resultsDir, 'summary.json'), `${JSON.stringify(summary, null, 2)}\n`);
 console.log(`\n${text}`);
 console.log(`Summary written to ${relative(root, join(resultsDir, 'summary.md'))} and summary.json`);
+if (options.record) record(skills, entries, summary, text);
 if (failed || (options.strict && regressions.length > 0)) process.exit(1);
