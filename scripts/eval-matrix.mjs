@@ -318,6 +318,31 @@ function scoreEntry(skill, entry) {
     metrics[metric] = { with_skill: withSkill, without_skill: withoutSkill, delta: withSkill - withoutSkill, cases: shared.length };
   }
 
+  // Cost of a trial in tokens, money and time, compared the same way as the
+  // scores: per case first, then over the cases both arms ran.
+  const efficiency = {};
+  for (const [name, field] of [['input_tokens', 'inputTokens'], ['cost_usd', 'costUsd'], ['seconds', 'seconds']]) {
+    const perCase = (trials) => {
+      const byCase = new Map();
+      for (const trial of trials) {
+        if (typeof trial[field] !== 'number' || trial.error) continue;
+        byCase.set(trial.caseId, [...(byCase.get(trial.caseId) ?? []), trial[field]]);
+      }
+      return new Map([...byCase].map(([id, values]) => [id, mean(values)]));
+    };
+    const withCases = perCase(arm(true));
+    const withoutCases = perCase(arm(false));
+    const shared = [...withCases.keys()].filter((id) => withoutCases.has(id));
+    if (shared.length === 0) continue;
+    const withSkill = mean(shared.map((id) => withCases.get(id)));
+    const withoutSkill = mean(shared.map((id) => withoutCases.get(id)));
+    efficiency[name] = {
+      with_skill: withSkill,
+      without_skill: withoutSkill,
+      change: withoutSkill > 0 ? (withSkill - withoutSkill) / withoutSkill : undefined,
+    };
+  }
+
   const usage = (trials) => ({
     trials: trials.length,
     errors: trials.filter((trial) => trial.error).length,
@@ -341,6 +366,7 @@ function scoreEntry(skill, entry) {
     scored_trials: data.trials.filter((trial) => trial.rewards).length,
     cases: new Set(data.trials.map((trial) => trial.caseId)).size,
     metrics,
+    efficiency,
     with_skill: usage(arm(true)),
     without_skill: usage(arm(false)),
     skill_loaded: { expected: loadRate(true), not_expected: loadRate(false) },
@@ -352,8 +378,12 @@ const formatScore = (metric) => {
   const sign = metric.delta > 0 ? '+' : '';
   return `${metric.without_skill.toFixed(2)} → ${metric.with_skill.toFixed(2)} (${sign}${metric.delta.toFixed(2)})`;
 };
-const formatPair = (without, withSkill, format) =>
-  without === undefined || withSkill === undefined ? 'n/a' : `${format(without)} → ${format(withSkill)}`;
+// Baseline → with skill, and the relative change. Lower is better.
+const formatCost = (pair, format) => {
+  if (!pair) return 'n/a';
+  const change = pair.change === undefined ? '' : ` (${pair.change > 0 ? '+' : ''}${Math.round(pair.change * 100)}%)`;
+  return `${format(pair.without_skill)} → ${format(pair.with_skill)}${change}`;
+};
 const formatRate = (rate) => (rate === undefined ? 'n/a' : `${Math.round(rate * 100)}%`);
 const thousands = (value) => `${Math.round(value / 1000)}k`;
 
@@ -366,8 +396,8 @@ function summarise(skills, entries, statuses) {
   for (const skill of skills) {
     summary[skill] = {};
     lines.push(`## ${skill}`, '');
-    lines.push('| Entry | Agent | Model | Effort | Tier | Cases | File checks | Output checks | Astro build | Trials (errors) | Input tokens | Seconds | Skill loaded: expected / not expected | Status |');
-    lines.push('| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |');
+    lines.push('| Entry | Agent | Model | Effort | Tier | Cases | File checks | Output checks | Astro build | Trials (errors) | Input tokens | Cost per trial | Seconds | Skill loaded: expected / not expected | Status |');
+    lines.push('| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |');
     for (const entry of entries) {
       const scores = scoreEntry(skill, entry);
       const status = statuses.get(`${skill}/${entry.id}`);
@@ -388,8 +418,9 @@ function summarise(skills, entries, statuses) {
           formatScore(scores?.metrics.output_checks),
           formatScore(scores?.metrics.astro_build),
           trials,
-          formatPair(scores?.without_skill.input_tokens, scores?.with_skill.input_tokens, thousands),
-          formatPair(scores?.without_skill.seconds, scores?.with_skill.seconds, (value) => Math.round(value)),
+          formatCost(scores?.efficiency.input_tokens, thousands),
+          formatCost(scores?.efficiency.cost_usd, (value) => `$${value.toFixed(value < 0.1 ? 4 : 2)}`),
+          formatCost(scores?.efficiency.seconds, (value) => Math.round(value)),
           `${formatRate(scores?.skill_loaded.expected)} / ${formatRate(scores?.skill_loaded.not_expected)}`,
           statusText,
         ].join(' | ')} |`,
@@ -407,7 +438,7 @@ function summarise(skills, entries, statuses) {
   lines.push('Score, token and time cells show without-skill → with-skill. Scores are 0-1, averaged over attempts and then over cases.');
   lines.push('File checks, output checks and Astro build are deterministic, so every row is comparable. Each is averaged over the cases that have it.');
   lines.push('Cases is how many of the skill\'s cases have results. When several runs cover a case, the newest run counts.');
-  lines.push('Trials are baseline + with-skill; tokens and seconds are per-trial means.');
+  lines.push('Trials are baseline + with-skill. Input tokens, cost and seconds are per trial, averaged per case and then over cases, with the change the skill makes; lower is better. Cost is the agent\'s model cost as reported by Harbor.');
   lines.push('Skill loaded is the share of with-skill trials in which the agent loaded the skill, for cases where it should and for cases where it should not. It is read from recorded tool calls and is a heuristic.');
   lines.push('');
   if (regressions.length > 0) {
@@ -488,9 +519,10 @@ function record(skills, entries, summary, text) {
   writeFileSync(join(recordDir, 'run.json'), `${JSON.stringify(run, null, 2)}\n`);
 
   // README: a compact table between the results markers.
-  const lines = [`${heading} Cells show the score without the skill → with it (0-1).`, ''];
-  lines.push('| Skill | Agent | Model | Effort | File checks | Output checks | Build | Skill loaded when expected |');
-  lines.push('| --- | --- | --- | --- | --- | --- | --- | --- |');
+  const lines = [`${heading} Score cells show the score without the skill → with it (0-1). Cost and time show the change the skill makes per trial; negative is cheaper or faster.`, ''];
+  lines.push('| Skill | Agent | Model | Effort | File checks | Output checks | Build | Cost per trial | Time per trial | Skill loaded when expected |');
+  lines.push('| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |');
+  const change = (pair) => (pair?.change === undefined ? 'n/a' : `${pair.change > 0 ? '+' : ''}${Math.round(pair.change * 100)}%`);
   const cell = (metric) => (metric ? `${metric.without_skill.toFixed(2)} → ${metric.with_skill.toFixed(2)}` : 'n/a');
   for (const skill of skills) {
     for (const entry of entries) {
@@ -498,7 +530,7 @@ function record(skills, entries, summary, text) {
       if (!scores.used_jobs) continue;
       const loaded = scores.skill_loaded?.expected;
       lines.push(
-        `| ${skill} | ${entry.agent} | \`${entry.model}\` | ${entry.effort ?? 'default'} | ${cell(scores.metrics.file_checks)} | ${cell(scores.metrics.output_checks)} | ${cell(scores.metrics.astro_build)} | ${loaded === undefined ? 'n/a' : `${Math.round(loaded * 100)}%`} |`,
+        `| ${skill} | ${entry.agent} | \`${entry.model}\` | ${entry.effort ?? 'default'} | ${cell(scores.metrics.file_checks)} | ${cell(scores.metrics.output_checks)} | ${cell(scores.metrics.astro_build)} | ${change(scores.efficiency.cost_usd)} | ${change(scores.efficiency.seconds)} | ${loaded === undefined ? 'n/a' : `${Math.round(loaded * 100)}%`} |`,
       );
     }
   }

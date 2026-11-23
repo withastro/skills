@@ -203,7 +203,7 @@ The summary is printed and written to `.eval-results/summary.md` and `summary.js
 
 - **File checks** and **Astro build** show the baseline score, the with-skill score and the difference. They are deterministic and comparable across all rows.
 - **Trials (errors)**: a trial with an error (a timeout, a provider failure) has no score. Look at the trial's `result.json` before trusting a row with errors.
-- **Input tokens** and **Seconds** are per-trial means for each arm. A skill that changes no score but halves the tokens is still doing something.
+- **Input tokens**, **Cost per trial** and **Seconds** show the baseline, the with-skill value and the relative change, compared per case. Lower is better. A skill that changes no score but makes the agent cheaper or faster is still earning its place; one that changes no score and costs more is not.
 - **Skill loaded** is the share of with-skill trials in which the agent loaded the skill, for cases where it should and for cases where it should not. It is read from the agent's recorded tool calls and is a heuristic: confirmed on an OpenCode trajectory, not yet on Claude Code or Codex.
 - `--strict` exits non-zero when a frontier entry's score drops by more than `regressionTolerance`.
 
