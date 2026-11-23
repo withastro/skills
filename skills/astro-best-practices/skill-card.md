@@ -67,7 +67,7 @@ Other properties: No data is stored or transmitted by the skill.
 
 ## Skill Version
 
-0.1.0. Signing is not yet set up; see the repository's release checklist.
+0.2.0. Signing is not yet set up; see the repository's release checklist.
 
 ## Ethical Considerations
 

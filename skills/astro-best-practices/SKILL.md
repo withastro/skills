@@ -4,7 +4,7 @@ description: Current best practices for building with Astro 7 and for upgrading 
 license: MIT
 metadata:
   author: Astro
-  version: "0.1.0"
+  version: "0.2.0"
   tags:
     - astro
     - web-framework
@@ -15,72 +15,55 @@ metadata:
 
 ## Purpose
 
-Help write, review and upgrade Astro code that is correct for the installed Astro version. Astro 5, 6 and 7 removed or renamed many APIs, so remembered Astro code is often wrong. This skill lists what changed and points to the official docs for details.
+Astro 5, 6 and 7 removed or renamed many APIs, so remembered Astro code is often wrong or deprecated. This file lists what changed. It describes Astro 7; check the installed `astro` version in `package.json` first, and for a project on Astro 4-6 keep the code valid for that version (see the upgrading reference before bumping it).
 
-## Start here
-
-1. Read the `astro` version in `package.json` (and the lockfile if the range is loose). This skill describes Astro 7. For a project on Astro 4-6, keep the code valid for its installed version and read [upgrading](references/upgrading.md) before using a newer API or bumping the version.
-2. Follow the project's existing conventions (package manager, TypeScript strictness, file layout, UI framework) unless they are the problem.
-3. When unsure about an API, option name or default, look it up before writing it. Use the Astro docs MCP tool `search_astro_docs` if it is available; otherwise read the relevant page under `https://docs.astro.build/en/`. Do not fetch `docs.astro.build/llms.txt`; it no longer exists.
-
-A small, local edit does not need a docs lookup or a project audit. Look things up when the code touches something in the table below or an API you have not seen in this project.
+This file is enough for most edits. Open a reference only for the topics listed at the end. When unsure of an API or option name, look it up at `https://docs.astro.build/en/` before writing it.
 
 ## Outdated patterns to replace
 
-These are removed or deprecated. Never write the left-hand form in an Astro 7 project, and flag it in reviews.
+These still appear in older code and examples. Do not write the left-hand form in an Astro 7 project, and flag it in reviews.
 
 | Outdated | Current |
 | --- | --- |
-| `src/content/config.ts`, collections without a `loader`, `type: 'content'` / `'data'` | `src/content.config.ts`; every collection has a `loader` such as `glob({ pattern, base })` or `file()` from `astro/loaders` |
-| `entry.render()`, `entry.slug`, `getEntryBySlug()`, `getDataEntryById()` | `render(entry)` from `astro:content`, `entry.id`, `getEntry()` |
-| `import { z } from 'astro:content'` or `'astro:schema'`; Zod 3 forms such as `z.string().email()` | `import { z } from 'astro/zod'` (Zod 4): `z.email()`, `z.url()`, `{ error: '...' }` for messages |
+| `import { z } from 'astro:content'` or `'astro:schema'` (deprecated, still runs) | `import { z } from 'astro/zod'` in content configs, actions and anywhere else |
+| Zod 3 forms: `z.string().email()`, `{ message: '...' }` | Zod 4: `z.email()`, `z.url()`, `{ error: '...' }` |
+| `src/content/config.ts`, collections without a `loader`, `type: 'content'` | `src/content.config.ts`; every collection has `loader: glob({ pattern, base })` or `file()` from `astro/loaders` |
+| `entry.render()`, `entry.slug`, `getEntryBySlug()` | `render(entry)` from `astro:content`, `entry.id`, `getEntry()` |
 | `Astro.glob()` | `getCollection()` for content, `import.meta.glob()` for other files |
-| `output: 'hybrid'` | Default `output: 'static'` plus `export const prerender = false` on the routes that render on demand (needs an adapter) |
-| `<ViewTransitions />` and `TRANSITION_*` constants or `isTransition*Event()` helpers | `<ClientRouter />` from `astro:transitions`; compare `event.type` with strings such as `'astro:after-swap'` |
-| `@astrojs/tailwind` integration | `astro add tailwind`, which sets up Tailwind 4 through `@tailwindcss/vite` and `@import "tailwindcss"` |
-| `@astrojs/db`, `astro:db` | Removed. Use `node:sqlite`, Drizzle or another database client directly |
-| `experimental.*` flags for cache, route rules, logger, fonts, CSP, live collections, the Rust compiler or advanced routing | These are stable. Use the top-level options (`cache`, `routeRules`, `logger`, `fonts`, `security.csp`) and delete the flag |
-| `session: { driver: 'redis', options }` | `driver: sessionDrivers.redis({ ... })` with `sessionDrivers` imported from `astro/config` |
-| `markdown.remarkPlugins` / `rehypePlugins` assumed to work out of the box | Markdown is rendered by Sätteri. Unified plugins need `@astrojs/markdown-remark` installed and `markdown.processor: unified()` |
+| `output: 'hybrid'` | Default static output plus `export const prerender = false` on on-demand routes, with an adapter |
+| `<ViewTransitions />`, `TRANSITION_*` constants | `<ClientRouter />` from `astro:transitions`; event names as strings such as `'astro:after-swap'` |
+| `@astrojs/tailwind` | `npx astro add tailwind`: Tailwind 4 through `@tailwindcss/vite`, with `@import "tailwindcss"` in a stylesheet |
+| `@astrojs/db`, `astro:db` | Removed; use a database client directly |
+| `experimental.*` flags for cache, route rules, logger, fonts, CSP or live collections | Stable top-level options: `cache`, `routeRules`, `logger`, `fonts`, `security.csp` |
+| `session: { driver: 'redis', options }` | `driver: sessionDrivers.redis({ ... })`, with `sessionDrivers` from `astro/config` |
+| Remark or rehype plugins in `markdown.remarkPlugins` | Install `@astrojs/markdown-remark` and set `markdown.processor: unified({ remarkPlugins })`; Markdown is rendered by Sätteri by default |
 | `Astro.locals.runtime.env` on Cloudflare | `import { env } from 'cloudflare:workers'` |
-| Hand-editing `package.json` to add an integration or bump Astro | `astro add <integration>` and `npx @astrojs/upgrade` |
 
-## Astro 7 behaviour that breaks silently
+## Behaviour that builds but is wrong
 
-- **Whitespace between inline elements is dropped.** `compressHTML` defaults to `'jsx'`, so `<span>a</span>` followed by `<em>b</em>` on the next line renders `ab`. Write `{" "}` between inline elements that need a space.
-- **The compiler is strict.** Every non-void element needs a closing tag, and invalid nesting such as `<div>` inside `<p>` is no longer repaired. Write valid HTML.
-- **`src/fetch.ts` is reserved** for advanced routing, like `src/middleware.ts`. Do not create a helper with that name.
-- **`import.meta.env` values are inlined at build time and never coerced.** `"true"` stays a string. Prefer `astro:env` with a schema for typed, validated variables.
-- **Scripts run once per page load.** With `<ClientRouter />`, re-run setup code on the `astro:page-load` event.
-- **A `<script>` with any attribute other than `src` is not bundled.** That includes `is:inline` and `define:vars`; such a script cannot use imports unless it has `type="module"` and browser-resolvable paths.
-
-## Defaults to keep
-
-- **Ship no JavaScript unless something is interactive.** Use `.astro` components for static UI. Add a `client:*` directive only to components that need interactivity, and choose the latest one that works: `client:visible` or `client:idle` before `client:load`. A framework component without a directive renders as static HTML.
-- **Keep content in collections.** Query with `getCollection()` and `getEntry()`, validate frontmatter with a schema, and generate routes from entries.
-- **Prerender by default.** Opt single routes into on-demand rendering; do not switch the whole site to `output: 'server'` for one dynamic page.
-- **Use the built-in feature before a hand-rolled one**: `<Image />` and `<Picture />` from `astro:assets` for images in `src/`, actions for form and mutation endpoints, `astro:env` for environment variables, sessions for per-visitor server state, `Astro.cache` and `routeRules` for response caching.
-- **Keep secrets and request data on the server.** Component frontmatter runs on the server only: there is no `window` or `document` there, and its variables are not available to client scripts unless passed explicitly.
-
-## References
-
-Read the file that matches the task. Each is self-contained.
-
-| Reference | Read it when |
-| --- | --- |
-| [components-and-islands.md](references/components-and-islands.md) | Writing `.astro` components, hydrating framework components, server islands, client scripts, scoped styles, view transitions |
-| [content-collections.md](references/content-collections.md) | Defining or querying collections, loaders, schemas, references, live collections, generating routes from content |
-| [rendering-and-routing.md](references/rendering-and-routing.md) | On-demand rendering, adapters, dynamic routes, middleware, redirects and rewrites, advanced routing, caching, i18n |
-| [server-features.md](references/server-features.md) | Actions and forms, `astro:env`, sessions, cookies, security settings |
-| [markdown-and-assets.md](references/markdown-and-assets.md) | Markdown and MDX configuration, plugins, images, fonts |
-| [upgrading.md](references/upgrading.md) | The project is on Astro 4-6, an upgrade is requested, or a build fails on a removed API |
+- **Whitespace between inline elements on separate lines is removed.** Write `{" "}` where a space is needed, for example `By{" "}<strong>{author}</strong>`.
+- **`import.meta.env` values are strings.** `PUBLIC_FLAG=false` is truthy; compare with `=== 'true'`, or declare the variable with `astro:env`.
+- **An endpoint or page is prerendered unless it has `export const prerender = false`.** Anything that must run per request (current time, cookies, sessions, form handling) needs it, plus an adapter.
+- **A framework component is static HTML without a `client:*` directive.** Prefer `client:visible` or `client:idle` to `client:load`.
+- **With `<ClientRouter />`, scripts run once.** Put per-page setup inside `document.addEventListener('astro:page-load', ...)`.
+- **Images must be imported.** `import hero from '../assets/hero.png'` with `<Image src={hero} alt="..." />` from `astro:assets`; a path string such as `/src/assets/hero.png` is broken in the built site.
+- **A `<script>` with any attribute other than `src` is not bundled** and cannot use imports. **`src/fetch.ts` is a reserved file name.**
 
 ## Check your work
 
-- Run the project's own checks. If it has none, `npx astro check` type-checks `.astro` files and `npx astro build` catches compiler, content schema and routing errors.
-- To inspect a running site, start the dev server in the background with `astro dev --background`, then use `astro dev status`, `astro dev logs` and `astro dev stop`. Do not start a second server when one is already running.
-- After changing a content config or schema, run `npx astro sync` so generated types are current.
+Run `npx astro build` before finishing (and `npx astro check` for types, if the project uses it). An edit that is not built is not verified. Use `npx astro add <integration>` and `npx @astrojs/upgrade` instead of editing dependency versions by hand.
 
-## Scope
+## References
 
-This skill covers Astro core. For Starlight documentation sites, also load `starlight-best-practices`. For host-specific deployment details beyond what the adapter docs say, use the host's own documentation or skill.
+Open one only when the task is about its topic.
+
+| Reference | Topic |
+| --- | --- |
+| [content-collections.md](references/content-collections.md) | Loaders, schemas and references, querying, routes from content, live collections |
+| [components-and-islands.md](references/components-and-islands.md) | Hydration and props, server islands, client scripts, scoped styles, view transitions |
+| [rendering-and-routing.md](references/rendering-and-routing.md) | Adapters, dynamic routes, middleware, advanced routing, route caching, i18n |
+| [server-features.md](references/server-features.md) | Actions and forms, `astro:env`, sessions, security settings |
+| [markdown-and-assets.md](references/markdown-and-assets.md) | Markdown processors and plugins, MDX, images, fonts |
+| [upgrading.md](references/upgrading.md) | Moving a project from Astro 4, 5 or 6 |
+
+For Starlight documentation sites, also load `starlight-best-practices`.
