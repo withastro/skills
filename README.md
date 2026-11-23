@@ -43,6 +43,14 @@ The repository is set up for [mise](https://mise.jdx.dev/): `mise install` provi
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for how to run them and how to change a skill, and [docs/release-checklist.md](docs/release-checklist.md) for the release steps.
 
+## Measured results
+
+Each skill is evaluated by running the same tasks with and without it and comparing deterministic scores. Results are recorded by maintainers from full local runs; see [CONTRIBUTING.md](CONTRIBUTING.md#recording-results).
+
+<!-- results:start -->
+No run has been recorded yet.
+<!-- results:end -->
+
 ## License
 
 [MIT](LICENSE)

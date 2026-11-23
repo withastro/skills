@@ -209,6 +209,28 @@ The summary is printed and written to `.eval-results/summary.md` and `summary.js
 
 A partial run (`--max-cases`, `--case`) is for iteration. Use a full run as release evidence, and attach the summary to the release notes.
 
+### Recording results
+
+Evaluations run locally, so the repository keeps a record that others can read and check. After a full run:
+
+```sh
+node scripts/eval-matrix.mjs --resume --record
+```
+
+`--record` writes `evals/results/<date>-<commit>/` with `summary.md`, `summary.json` and `run.json` (commit, Harbor version, agent versions, models and effort), and updates the results table in the README. Review the changes and commit them.
+
+It refuses to record unless the result can be tied to exactly what was tested:
+
+- every job was started at the current commit, with no uncommitted changes in `skills/`, `evals/` or `scripts/`;
+- every entry that ran covers all of the skill's cases;
+- the whole matrix is selected (no `--skill`, `--only`, `--case` or `--max-cases`).
+
+Entries without a key are listed in the record as not run. So the sequence is: commit your changes, run the full matrix, then record.
+
+Record what the run shows, including entries where the skill makes no difference or scores lower. A table with only wins is less convincing than one that is complete.
+
+The raw trials in `.eval-results/` are too large for git. To let others inspect them, attach an archive to the GitHub release (`tar -czf eval-results.tar.gz .eval-results`). Check it for secrets first.
+
 ## Commit messages
 
 Use [Conventional Commits](https://www.conventionalcommits.org/), for example `feat(astro-best-practices): cover route caching` or `fix(starlight-best-practices): correct sidebar slug rule`.

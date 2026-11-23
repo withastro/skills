@@ -18,6 +18,7 @@ evals/
   <name>/cases.json   eval cases for a skill
   <name>/fixtures/    small projects the cases start from
   <name>/solutions/   reference solution per case, used to verify the case
+  results/            recorded results of full runs; written by --record, not by hand
 scripts/
   eval-matrix.mjs     live evals with Harbor (local only)
   dedup.mjs           SkillEvaluator Tier 2 (local only)

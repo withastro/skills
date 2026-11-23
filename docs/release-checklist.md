@@ -22,7 +22,8 @@ Steps for releasing a new version of a skill. Adapted from NVIDIA's [agent skill
 - [ ] For every frontier model, the deterministic scores with the skill are not lower than without it beyond the tolerance (`--strict` passes).
 - [ ] For at least one small model, the skill improves the deterministic scores. If it does not, find out why before releasing: the content may be restating what models already know.
 - [ ] The skill was loaded in most trials where it should be, and not in the cases marked `should_trigger: false`.
-- [ ] The summary table from `.eval-results/summary.md` is attached to the release notes.
+- [ ] The run is recorded with `--record` and the new `evals/results/` directory and README table are committed.
+- [ ] The raw trials are attached to the release as an archive, after checking it for secrets.
 
 ## Skill card
 
