@@ -12,9 +12,17 @@ Inputs:
 Output: /logs/verifier/reward.json with scores from 0 to 1:
 - `file_checks`: fraction of the case's `file_checks` that hold. Each check
   names a file or glob and regular expressions that must or must not match.
-- `astro_build`: 1 when `astro build` succeeds, 0 when it fails. Only for
-  cases with `"build_check": true`.
+- `astro_build`: 1 when `astro build` succeeds, 0 when it fails. For cases
+  with `"build_check": true` or with `output_checks`.
+- `output_checks`: fraction of the case's `output_checks` that hold in the
+  build output directory (`dist/`). Same shape as file checks. These catch
+  mistakes that build without error but produce the wrong site. 0 when the
+  build fails.
 - `reward`: the mean of the scores above.
+
+A check is `{"path": ..., "exists": false}`, or `{"path": ..., "contains":
+[...], "not_contains": [...]}`, or `{"any_of": [check, ...]}`, which passes
+when at least one of its checks does.
 
 Details of every check are written to /logs/verifier/details.json.
 
@@ -65,7 +73,15 @@ def read_text(path: Path) -> str:
 
 
 def run_file_check(project: Path, check: Dict[str, Any]) -> Tuple[bool, str]:
-    """Evaluate one file check. Returns (passed, reason)."""
+    """Evaluate one check against the files under `project`. Returns (passed, reason)."""
+    if "any_of" in check:
+        reasons = []
+        for alternative in check["any_of"]:
+            passed, reason = run_file_check(project, alternative)
+            if passed:
+                return True, "ok"
+            reasons.append(reason)
+        return False, "none of: " + "; ".join(reasons)
     pattern = check.get("path", "")
     files = matching_files(project, pattern)
 
@@ -149,11 +165,19 @@ def main() -> None:
         scores["file_checks"] = result["score"]
         details["file_checks"] = result
 
-    if case.get("build_check"):
+    output_checks = case.get("output_checks") or []
+    if case.get("build_check") or output_checks:
         result = grade_build(PROJECT_DIR)
         if result is not None:
             scores["astro_build"] = result["score"]
             details["astro_build"] = result
+            if output_checks and result["score"] == 1.0:
+                result = grade_file_checks(PROJECT_DIR / "dist", output_checks)
+                scores["output_checks"] = result["score"]
+                details["output_checks"] = result
+            elif output_checks:
+                scores["output_checks"] = 0.0
+                details["output_checks"] = {"score": 0.0, "reason": "build failed"}
 
     reward = dict(scores)
     reward["reward"] = sum(scores.values()) / len(scores) if scores else 1.0
