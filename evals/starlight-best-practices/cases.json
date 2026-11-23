@@ -80,7 +80,6 @@
         "The override does not spread `Astro.props` into the default component.",
         "The text \"Built with Starlight\" appears before the default footer."
       ],
-      "build_check": true,
       "file_checks": [
         {
           "id": "override-registered",
@@ -94,8 +93,7 @@
           "id": "default-reused",
           "path": "src/components/*.astro",
           "contains": [
-            "@astrojs/starlight/components/Footer\\.astro",
-            "Built with Starlight"
+            "@astrojs/starlight/components/Footer\\.astro"
           ]
         },
         {
@@ -104,6 +102,15 @@
           "not_contains": [
             "\\{\\s*\\.\\.\\.Astro\\.props\\s*\\}",
             "@astrojs/starlight/props"
+          ]
+        }
+      ],
+      "output_checks": [
+        {
+          "id": "line-rendered",
+          "path": "index.html",
+          "contains": [
+            "Built with Starlight"
           ]
         }
       ]
