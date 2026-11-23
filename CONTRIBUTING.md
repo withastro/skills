@@ -143,13 +143,13 @@ Live evaluations run on your machine with your own provider keys. Put the keys y
 
 Matrix entries whose key is missing are skipped, so one key is enough to start. Harbor also reads `.env.local` itself and uses the key that matches the model's provider.
 
-Live runs cost money and take time. A trial takes a few minutes. A full matrix is two skills, ten cases, six entries, two arms and three attempts: 720 trials. Start small.
+Live runs cost money and take time. A trial takes a few minutes. A full matrix is 31 cases, six entries, two arms and three attempts: about 1,100 trials. Start small.
 
 ```sh
 # Check everything without calling a model
 pnpm eval:dry
 
-# One entry, first two cases, one attempt: eight trials
+# One entry, first two cases, one attempt: four trials
 node scripts/eval-matrix.mjs --skill astro-best-practices --only claude-code-haiku --max-cases 2 --attempts 1
 
 # One case on every entry you have a key for
