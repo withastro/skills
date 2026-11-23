@@ -19,7 +19,7 @@ Help write, configure and customise Starlight documentation sites correctly for 
 
 ## Start here
 
-1. Read the installed `@astrojs/starlight` and `astro` versions from the project's dependencies. This skill describes Starlight 0.43 on Astro 7. Each Starlight minor supports one Astro major (0.41+ needs Astro 7, 0.38-0.40 need Astro 6, 0.30-0.37 need Astro 5), so upgrade both together with `npx @astrojs/upgrade`.
+1. Read the `@astrojs/starlight` and `astro` versions in `package.json`. This skill describes Starlight 0.43 on Astro 7. Each Starlight minor supports one Astro major (0.41+ needs Astro 7, 0.38-0.40 need Astro 6, 0.30-0.37 need Astro 5), so upgrade both together with `npx @astrojs/upgrade`.
 2. Starlight is an Astro integration. Astro's own rules still apply; load `astro-best-practices` for anything that is not Starlight-specific.
 3. When unsure about an option or component name, look it up. Use the Astro docs MCP tool `search_astro_docs` if it is available (it covers the Starlight docs); otherwise read the relevant page under `https://starlight.astro.build/`. Do not fetch `starlight.astro.build/llms.txt`; it does not exist.
 

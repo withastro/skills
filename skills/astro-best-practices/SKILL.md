@@ -19,7 +19,7 @@ Help write, review and upgrade Astro code that is correct for the installed Astr
 
 ## Start here
 
-1. Read the installed `astro` version from the project's dependencies (and the lockfile if the range is loose). This skill describes Astro 7. For a project on Astro 4-6, keep the code valid for its installed version and read [upgrading](references/upgrading.md) before using a newer API or bumping the version.
+1. Read the `astro` version in `package.json` (and the lockfile if the range is loose). This skill describes Astro 7. For a project on Astro 4-6, keep the code valid for its installed version and read [upgrading](references/upgrading.md) before using a newer API or bumping the version.
 2. Follow the project's existing conventions (package manager, TypeScript strictness, file layout, UI framework) unless they are the problem.
 3. When unsure about an API, option name or default, look it up before writing it. Use the Astro docs MCP tool `search_astro_docs` if it is available; otherwise read the relevant page under `https://docs.astro.build/en/`. Do not fetch `docs.astro.build/llms.txt`; it no longer exists.
 
@@ -43,7 +43,7 @@ These are removed or deprecated. Never write the left-hand form in an Astro 7 pr
 | `session: { driver: 'redis', options }` | `driver: sessionDrivers.redis({ ... })` with `sessionDrivers` imported from `astro/config` |
 | `markdown.remarkPlugins` / `rehypePlugins` assumed to work out of the box | Markdown is rendered by Sätteri. Unified plugins need `@astrojs/markdown-remark` installed and `markdown.processor: unified()` |
 | `Astro.locals.runtime.env` on Cloudflare | `import { env } from 'cloudflare:workers'` |
-| Hand-editing dependency versions to add an integration or bump Astro | `astro add <integration>` and `npx @astrojs/upgrade` |
+| Hand-editing `package.json` to add an integration or bump Astro | `astro add <integration>` and `npx @astrojs/upgrade` |
 
 ## Astro 7 behaviour that breaks silently
 
