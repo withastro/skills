@@ -1,0 +1,18 @@
+---
+import { Image } from 'astro:assets';
+import Layout from '../layouts/Layout.astro';
+import PostHeader from '../components/PostHeader.astro';
+import hero from '../assets/hero.png';
+
+const post = {
+  title: 'Notes on the Analytical Engine',
+  author: 'Ada Lovelace',
+  date: new Date('1815-12-10T00:00:00Z'),
+};
+---
+
+<Layout title={post.title}>
+  <Image src={hero} alt="Abstract purple banner" />
+  <PostHeader title={post.title} author={post.author} date={post.date} />
+  <p>The engine weaves algebraic patterns just as the Jacquard loom weaves flowers and leaves.</p>
+</Layout>

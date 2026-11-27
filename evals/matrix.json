@@ -1,0 +1,17 @@
+{
+  "$comment": "Harness x model matrix for scripts/eval-matrix.mjs (Harbor). Each entry is run twice per case: once with the skill installed and once without. Edit `entries` to change models or effort. `model` is a Harbor model name: `anthropic/<id>`, `openai/<id>`, or `openrouter/<provider>/<id>` for any model on OpenRouter. `effort` is the reasoning effort for the agent (claude-code: low, medium, high, xhigh, max; codex: none, minimal, low, medium, high, xhigh, max; opencode: a variant name the model defines); null leaves the agent's default. `key` is the environment variable holding the API key. Optional `version` pins the agent CLI version.",
+  "attempts": 3,
+  "concurrency": 4,
+  "regressionTolerance": 0.05,
+  "entries": [
+    { "id": "claude-code-haiku", "agent": "claude-code", "model": "anthropic/claude-haiku-5-5", "effort": "medium", "tier": "small", "key": "ANTHROPIC_API_KEY" },
+    { "id": "claude-code-opus", "agent": "claude-code", "model": "anthropic/claude-opus-5-5", "effort": "high", "tier": "frontier", "key": "ANTHROPIC_API_KEY" },
+    { "id": "codex-luna", "agent": "codex", "model": "openai/gpt-6-luna", "effort": "medium", "tier": "small", "key": "OPENAI_API_KEY" },
+    { "id": "codex-sol", "agent": "codex", "model": "openai/gpt-6.2-sol", "effort": "high", "tier": "frontier", "key": "OPENAI_API_KEY" },
+    { "id": "opencode-gemini-hydrogen", "agent": "opencode", "model": "openrouter/google/gemini-4-hydrogen", "effort": null, "tier": "small", "key": "OPENROUTER_API_KEY" },
+    { "id": "opencode-gemini-neon", "agent": "opencode", "model": "openrouter/google/gemini-4-neon", "effort": null, "tier": "frontier", "key": "OPENROUTER_API_KEY" },
+    { "id": "opencode-hy4-flash", "agent": "opencode", "model": "openrouter/tencent/hy4-flash", "effort": null, "tier": "small", "key": "OPENROUTER_API_KEY" },
+    { "id": "opencode-deepseek-flash", "agent": "opencode", "model": "openrouter/deepseek/deepseek-v4.1-flash-1017", "effort": null, "tier": "small", "key": "OPENROUTER_API_KEY" },
+    { "id": "opencode-inkling-mini", "agent": "opencode", "model": "openrouter/thinkingmachines/inkling-2-mini", "effort": null, "tier": "small", "key": "OPENROUTER_API_KEY" }
+  ]
+}

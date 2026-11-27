@@ -1,0 +1,23 @@
+---
+import { getProduct } from '../../data/products';
+
+export const prerender = false;
+
+const product = Astro.params.id ? await getProduct(Astro.params.id) : undefined;
+if (!product) {
+  return new Response(null, { status: 404, statusText: 'Not found' });
+}
+
+Astro.cache.set({ maxAge: 600, swr: 60, tags: ['products'] });
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>{product.name}</title>
+  </head>
+  <body>
+    <h1>{product.name}</h1>
+    <p>Price: {product.price}</p>
+  </body>
+</html>

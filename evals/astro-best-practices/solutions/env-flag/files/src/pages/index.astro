@@ -1,0 +1,19 @@
+---
+import Layout from '../layouts/Layout.astro';
+import PostHeader from '../components/PostHeader.astro';
+
+const post = {
+  title: 'Notes on the Analytical Engine',
+  author: 'Ada Lovelace',
+  date: new Date('1815-12-10T00:00:00Z'),
+};
+
+// import.meta.env values are strings, so compare explicitly.
+const showBeta = import.meta.env.PUBLIC_SHOW_BETA === 'true';
+---
+
+<Layout title={post.title}>
+  {showBeta && <p>This site is in beta.</p>}
+  <PostHeader title={post.title} author={post.author} date={post.date} />
+  <p>The engine weaves algebraic patterns just as the Jacquard loom weaves flowers and leaves.</p>
+</Layout>

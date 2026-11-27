@@ -1,0 +1,10 @@
+---
+import { ANNOUNCEMENT } from 'astro:env/client';
+import Layout from '../layouts/Layout.astro';
+---
+
+<Layout title="Home">
+  {ANNOUNCEMENT && <p class="announcement">{ANNOUNCEMENT}</p>}
+  <h1>Welcome</h1>
+  <p>A small site built with Astro.</p>
+</Layout>

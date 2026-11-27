@@ -1,0 +1,13 @@
+{
+  "name": "astro",
+  "description": "Official Astro skills: current best practices for Astro and Starlight projects, with the Astro docs MCP server for looking up APIs.",
+  "version": "0.2.0",
+  "author": {
+    "name": "Astro",
+    "url": "https://astro.build"
+  },
+  "homepage": "https://docs.astro.build/en/guides/build-with-ai/",
+  "repository": "https://github.com/withastro/skills",
+  "license": "MIT",
+  "keywords": ["astro", "starlight", "content-collections", "islands", "docs"]
+}

@@ -1,0 +1,666 @@
+{
+  "skill_name": "astro-best-practices",
+  "cases": [
+    {
+      "id": "content-collection-new",
+      "prompt": "In this Astro project, turn the Markdown files in src/data/blog into a blog. Define a content collection for them with a schema for title, pubDate and an optional draft flag, and add a page at /blog/<post id>/ that renders each post that is not a draft.",
+      "fixture": "astro-basic",
+      "should_trigger": true,
+      "expected_output": "A content collection named for the blog posts is defined with a loader and a schema, and a dynamic route under src/pages/blog renders each non-draft post. The project builds with Astro 7.",
+      "assertions": [
+        "The collection is defined in `src/content.config.ts` with a `loader` that reads `src/data/blog`.",
+        "The schema validates title, pubDate and an optional draft field.",
+        "The blog route renders post bodies with the `render()` function from `astro:content`.",
+        "Draft posts do not get a page."
+      ],
+      "build_check": true,
+      "file_checks": [
+        {
+          "id": "config-location",
+          "path": "src/content.config.*",
+          "contains": [
+            "loader\\s*:",
+            "astro/loaders"
+          ]
+        },
+        {
+          "id": "no-legacy-config",
+          "path": "src/content/config.*",
+          "exists": false
+        },
+        {
+          "id": "zod-import",
+          "path": "src/content.config.*",
+          "not_contains": [
+            "import\\s*\\{[^}]*\\bz\\b[^}]*\\}\\s*from\\s*['\"]astro:(content|schema)['\"]"
+          ]
+        },
+        {
+          "id": "render-function",
+          "path": "src/pages/blog/*.astro",
+          "contains": [
+            "render\\("
+          ],
+          "not_contains": [
+            "\\.render\\(\\)",
+            "\\.slug\\b"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "legacy-project-upgrade",
+      "prompt": "This Astro project was written for Astro 4. The astro dependency in package.json has just been bumped to Astro 7 and the site no longer builds. Update the code so it builds on Astro 7. Keep the same pages and URLs.",
+      "fixture": "astro-legacy",
+      "should_trigger": true,
+      "expected_output": "The project builds on Astro 7 with the home page and one page per blog post at the same URLs as before. Removed Astro APIs are replaced with their current equivalents.",
+      "assertions": [
+        "The content collection config is at `src/content.config.ts` and the blog collection has a `loader`.",
+        "No code uses `Astro.glob`, `entry.render()`, `entry.slug`, `<ViewTransitions />` or `output: 'hybrid'`.",
+        "The unclosed `<h1>` in the blog post page is closed.",
+        "Blog posts are still served at /blog/hello-world/ and /blog/second-post/."
+      ],
+      "build_check": true,
+      "file_checks": [
+        {
+          "id": "config-location",
+          "path": "src/content.config.*",
+          "contains": [
+            "loader\\s*:"
+          ],
+          "not_contains": [
+            "type\\s*:\\s*['\"]content['\"]"
+          ]
+        },
+        {
+          "id": "no-legacy-config",
+          "path": "src/content/config.*",
+          "exists": false
+        },
+        {
+          "id": "zod-import",
+          "path": "src/content.config.*",
+          "not_contains": [
+            "import\\s*\\{[^}]*\\bz\\b[^}]*\\}\\s*from\\s*['\"]astro:(content|schema)['\"]"
+          ]
+        },
+        {
+          "id": "no-hybrid-output",
+          "path": "astro.config.*",
+          "not_contains": [
+            "hybrid"
+          ]
+        },
+        {
+          "id": "no-astro-glob",
+          "path": "src/**/*.astro",
+          "not_contains": [
+            "Astro\\.glob"
+          ]
+        },
+        {
+          "id": "no-view-transitions-component",
+          "path": "src/**/*.astro",
+          "not_contains": [
+            "<ViewTransitions"
+          ]
+        },
+        {
+          "id": "no-entry-render-or-slug",
+          "path": "src/pages/blog/*.astro",
+          "not_contains": [
+            "\\.render\\(\\)",
+            "post\\.slug\\b"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "on-demand-endpoint",
+      "prompt": "In this Astro project, add an endpoint at /api/time.json that returns the current server time as JSON, computed on every request. Every other page must stay statically generated. The site will be deployed as a standalone Node server.",
+      "fixture": "astro-basic",
+      "should_trigger": true,
+      "expected_output": "A /api/time.json endpoint renders on demand and returns the current time as JSON, the Node adapter is configured, and the existing pages are still prerendered.",
+      "assertions": [
+        "The endpoint is rendered on demand, not prerendered at build time.",
+        "The existing pages remain prerendered.",
+        "An adapter for Node is installed and set in the Astro config.",
+        "The config does not use `output: 'hybrid'`."
+      ],
+      "file_checks": [
+        {
+          "id": "endpoint-exists",
+          "path": "src/pages/api/time.json.*"
+        },
+        {
+          "id": "adapter-configured",
+          "path": "astro.config.*",
+          "contains": [
+            "adapter\\s*:",
+            "@astrojs/node"
+          ]
+        },
+        {
+          "id": "no-hybrid-output",
+          "path": "astro.config.*",
+          "not_contains": [
+            "hybrid"
+          ]
+        },
+        {
+          "id": "adapter-installed",
+          "path": "package.json",
+          "contains": [
+            "\"@astrojs/node\""
+          ]
+        }
+      ],
+      "output_checks": [
+        {
+          "id": "endpoint-not-prerendered",
+          "path": "client/api/time.json",
+          "exists": false
+        },
+        {
+          "id": "endpoint-not-prerendered-static",
+          "path": "api/time.json",
+          "exists": false
+        },
+        {
+          "id": "home-still-prerendered",
+          "path": "client/index.html"
+        }
+      ]
+    },
+    {
+      "id": "remark-plugin",
+      "prompt": "In this Astro project, add the remark-toc plugin so that the `## Contents` heading in src/pages/guide.md is followed by a generated table of contents in the built page.",
+      "fixture": "astro-basic",
+      "should_trigger": true,
+      "expected_output": "remark-toc is installed and registered so that the built guide page contains a generated list of links under the Contents heading.",
+      "assertions": [
+        "`remark-toc` is added to the project's dependencies.",
+        "`@astrojs/markdown-remark` is added to the project's dependencies, because Astro 7 no longer includes the remark pipeline by default.",
+        "The Astro config registers remark-toc through a Markdown processor configuration that runs remark plugins."
+      ],
+      "build_check": true,
+      "file_checks": [
+        {
+          "id": "plugin-installed",
+          "path": "package.json",
+          "contains": [
+            "\"remark-toc\""
+          ]
+        },
+        {
+          "id": "unified-package-installed",
+          "path": "package.json",
+          "contains": [
+            "\"@astrojs/markdown-remark\""
+          ]
+        },
+        {
+          "id": "plugin-registered",
+          "path": "astro.config.*",
+          "contains": [
+            "remark-toc"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "action-form",
+      "prompt": "In this Astro project, add a newsletter sign-up form to the home page. Implement the submission as an Astro action that validates the email address and returns a success message. The form must work without client-side JavaScript. The site will be deployed as a standalone Node server.",
+      "fixture": "astro-basic",
+      "should_trigger": true,
+      "expected_output": "An action validates the submitted email, the home page has a form that posts to it and shows the result, and the project is configured to render that page on demand with the Node adapter.",
+      "assertions": [
+        "The action is exported from the `server` object in `src/actions/index.ts` and accepts form data.",
+        "The email is validated with a schema that uses `z` imported from `astro/zod`.",
+        "The home page form uses `method=\"POST\"` with the action as its `action` attribute and reads the result on the server.",
+        "The home page is rendered on demand and an adapter is configured."
+      ],
+      "build_check": true,
+      "file_checks": [
+        {
+          "id": "action-defined",
+          "path": "src/actions/index.*",
+          "contains": [
+            "defineAction",
+            "export\\s+const\\s+server"
+          ]
+        },
+        {
+          "id": "zod-import",
+          "path": "src/actions/index.*",
+          "not_contains": [
+            "from\\s*['\"]astro:(content|schema)['\"]"
+          ]
+        },
+        {
+          "id": "form-posts",
+          "path": "src/**/*.astro",
+          "contains": [
+            "method=[\"']?[Pp][Oo][Ss][Tt]",
+            "actions\\."
+          ]
+        },
+        {
+          "id": "adapter-configured",
+          "path": "astro.config.*",
+          "contains": [
+            "adapter\\s*:"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "tailwind-setup",
+      "prompt": "Add Tailwind CSS to this Astro project and use utility classes to make the home page heading large and bold.",
+      "fixture": "astro-basic",
+      "should_trigger": true,
+      "expected_output": "Tailwind CSS 4 is set up through its Vite plugin with a global stylesheet imported by the layout, and the home page heading uses Tailwind utility classes.",
+      "assertions": [
+        "Tailwind is added through `@tailwindcss/vite` in the Vite plugins of the Astro config.",
+        "The legacy `@astrojs/tailwind` integration is not used.",
+        "A stylesheet imports Tailwind (`@import \"tailwindcss\"` or its layered `tailwindcss/*.css` entries) and is loaded so it applies to the home page.",
+        "The home page heading has utility classes for size and weight."
+      ],
+      "build_check": true,
+      "file_checks": [
+        {
+          "id": "vite-plugin-installed",
+          "path": "package.json",
+          "contains": [
+            "\"@tailwindcss/vite\""
+          ],
+          "not_contains": [
+            "\"@astrojs/tailwind\""
+          ]
+        },
+        {
+          "id": "vite-plugin-configured",
+          "path": "astro.config.*",
+          "contains": [
+            "@tailwindcss/vite"
+          ],
+          "not_contains": [
+            "@astrojs/tailwind"
+          ]
+        },
+        {
+          "id": "stylesheet-import",
+          "path": "src/**/*.css",
+          "contains": [
+            "@import\\s+[\"']tailwindcss(/[\\w.-]+)?[\"']"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "client-router",
+      "prompt": "Enable Astro's client-side router with animated page transitions for every page of this Astro project.",
+      "fixture": "astro-basic",
+      "should_trigger": true,
+      "expected_output": "The shared layout enables Astro's client router so navigation between pages is animated.",
+      "assertions": [
+        "The shared layout renders `<ClientRouter />` imported from `astro:transitions` inside `<head>`.",
+        "The removed `<ViewTransitions />` component is not used."
+      ],
+      "build_check": true,
+      "file_checks": [
+        {
+          "id": "client-router",
+          "path": "src/layouts/Layout.astro",
+          "contains": [
+            "<ClientRouter",
+            "astro:transitions"
+          ],
+          "not_contains": [
+            "ViewTransitions"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "typed-env",
+      "prompt": "In this Astro project, the home page should show a site announcement read from an ANNOUNCEMENT environment variable, and server code will need an API_SECRET variable. Declare both with Astro's built-in type-safe environment variable support so they are validated, with ANNOUNCEMENT optional and public and API_SECRET kept out of client bundles, and show the announcement on the home page when it is set.",
+      "fixture": "astro-basic",
+      "should_trigger": true,
+      "expected_output": "Both variables are declared in an env schema in the Astro config, the home page reads ANNOUNCEMENT through Astro's typed env module and renders it when set, and API_SECRET is declared as a server-only secret.",
+      "assertions": [
+        "The Astro config declares `env.schema` with `envField` entries for ANNOUNCEMENT and API_SECRET.",
+        "API_SECRET is declared with server context and secret access.",
+        "The home page imports ANNOUNCEMENT from an `astro:env` module rather than reading `process.env`.",
+        "The announcement is only rendered when the variable is set."
+      ],
+      "file_checks": [
+        {
+          "id": "env-schema",
+          "path": "astro.config.*",
+          "contains": [
+            "envField",
+            "ANNOUNCEMENT",
+            "API_SECRET",
+            "access\\s*:\\s*['\"]secret['\"]"
+          ]
+        },
+        {
+          "id": "typed-import",
+          "path": "src/pages/index.astro",
+          "contains": [
+            "astro:env/(client|server)"
+          ],
+          "not_contains": [
+            "process\\.e[n]v"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "inline-byline",
+      "fixture": "astro-site",
+      "should_trigger": true,
+      "prompt": "In this Astro project, extend the PostHeader component to show a byline under the title that reads like \"By Ada Lovelace on 10 December 1815\", with the author name in bold and the date in a <time> element that has a machine-readable datetime attribute.",
+      "expected_output": "The built home page shows the byline with a space on each side of the bold author name and before the date, and the date is in a <time> element with a datetime attribute.",
+      "assertions": [
+        "The rendered byline reads \"By Ada Lovelace on 10 December 1815\" with spaces between the words and the inline elements.",
+        "The author name is in a `<strong>` element and the date in a `<time datetime=...>` element."
+      ],
+      "file_checks": [
+        {
+          "id": "time-element",
+          "path": "src/components/PostHeader.astro",
+          "contains": [
+            "<time",
+            "datetime=",
+            "<strong"
+          ]
+        }
+      ],
+      "output_checks": [
+        {
+          "id": "space-after-by",
+          "path": "index.html",
+          "contains": [
+            "By(\\s|&nbsp;|&#32;|&#x20;)+<strong[^>]*>\\s*Ada Lovelace\\s*</strong>"
+          ]
+        },
+        {
+          "id": "space-around-on",
+          "path": "index.html",
+          "contains": [
+            "</strong>(\\s|&nbsp;|&#32;|&#x20;)+on(\\s|&nbsp;|&#32;|&#x20;)+<time"
+          ]
+        },
+        {
+          "id": "date-rendered",
+          "path": "index.html",
+          "contains": [
+            "<time[^>]*datetime=\"1815-12-10[^\"]*\"[^>]*>\\s*10 December 1815\\s*</time>"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "env-flag",
+      "fixture": "astro-site",
+      "should_trigger": true,
+      "prompt": "In this Astro project, show a paragraph with the text \"This site is in beta.\" at the top of the home page, but only when the PUBLIC_SHOW_BETA environment variable is set to true. The .env file currently sets it to false.",
+      "expected_output": "The home page renders the beta notice only when PUBLIC_SHOW_BETA is the string \"true\". With the current .env value of false, the built page does not contain the notice.",
+      "assertions": [
+        "The condition treats the variable as a string or declares it as a boolean with `astro:env`; it does not rely on the truthiness of `import.meta.env.PUBLIC_SHOW_BETA`.",
+        "With PUBLIC_SHOW_BETA=false the built home page does not contain the notice."
+      ],
+      "file_checks": [
+        {
+          "id": "flag-used",
+          "path": "src/**/*.astro",
+          "contains": [
+            "SHOW_BETA",
+            "This site is in beta\\."
+          ]
+        }
+      ],
+      "output_checks": [
+        {
+          "id": "notice-hidden-when-false",
+          "path": "index.html",
+          "not_contains": [
+            "This site is in beta"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "hero-image",
+      "fixture": "astro-site",
+      "should_trigger": true,
+      "prompt": "In this Astro project, add the image at src/assets/hero.png to the top of the home page, above the post header, with the alt text \"Abstract purple banner\".",
+      "expected_output": "The built home page has an <img> with the alt text whose src points at a processed asset under /_astro/, and that asset exists in the build output.",
+      "assertions": [
+        "The image is imported from `src/assets/` and rendered with `<Image />` from `astro:assets` or an `<img>` using the import's `src`.",
+        "The built page does not reference `/src/assets/hero.png`.",
+        "The image has the requested alt text."
+      ],
+      "output_checks": [
+        {
+          "id": "processed-src",
+          "path": "index.html",
+          "contains": [
+            "<img[^>]+src=\"/_astro/hero\\.[^\"]+\"",
+            "alt=\"Abstract purple banner\""
+          ],
+          "not_contains": [
+            "src=\"/?src/assets/"
+          ]
+        },
+        {
+          "id": "asset-emitted",
+          "path": "_astro/hero.*"
+        }
+      ]
+    },
+    {
+      "id": "menu-after-navigation",
+      "fixture": "astro-site",
+      "should_trigger": true,
+      "prompt": "In this Astro project, the Menu button in the header opens the navigation on the first page load, but stops working after following a link to another page. Fix it without removing the page transitions.",
+      "expected_output": "The menu toggle is set up again after each client-side navigation, and the client router is still enabled.",
+      "assertions": [
+        "The toggle setup runs on the `astro:page-load` event, or uses another approach that survives client-side navigation such as a delegated listener on `document`.",
+        "`<ClientRouter />` is still rendered in the layout."
+      ],
+      "build_check": true,
+      "file_checks": [
+        {
+          "id": "survives-navigation",
+          "path": "src/**/*.astro",
+          "contains": [
+            "astro:page-load|astro:after-swap|data-astro-rerun|transition:persist|document\\.addEventListener\\(\\s*['\"]click['\"]"
+          ]
+        },
+        {
+          "id": "client-router-kept",
+          "path": "src/layouts/Layout.astro",
+          "contains": [
+            "<ClientRouter"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "route-cache",
+      "fixture": "astro-server",
+      "should_trigger": true,
+      "prompt": "In this Astro project, the product pages at /products/[id] are rendered on demand. Cache their responses for 10 minutes, keep serving a stale response for up to 1 more minute while it is refreshed, and tag them \"products\" so they can be invalidated together. Use Astro's built-in route caching with the in-memory provider.",
+      "expected_output": "Route caching is enabled with the in-memory provider at the top level of the Astro config, and product pages are cached for 600 seconds with 60 seconds of stale-while-revalidate and the tag products. The project builds.",
+      "assertions": [
+        "The Astro config sets `cache: { provider: memoryCache() }` at the top level, not under `experimental`.",
+        "Product pages are cached with `maxAge: 600`, `swr: 60` and the tag `products`, through `Astro.cache.set()` in the page or `routeRules` in the config."
+      ],
+      "build_check": true,
+      "file_checks": [
+        {
+          "id": "provider-configured",
+          "path": "astro.config.*",
+          "contains": [
+            "memoryCache\\(",
+            "cache\\s*:"
+          ],
+          "not_contains": [
+            "experimental"
+          ]
+        },
+        {
+          "id": "cache-policy",
+          "any_of": [
+            {
+              "path": "src/pages/products/*.astro",
+              "contains": [
+                "Astro\\.cache\\.set\\(",
+                "maxAge\\s*:\\s*600",
+                "swr\\s*:\\s*60",
+                "products"
+              ]
+            },
+            {
+              "path": "astro.config.*",
+              "contains": [
+                "routeRules",
+                "maxAge\\s*:\\s*600",
+                "swr\\s*:\\s*60",
+                "tags"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "session-counter",
+      "fixture": "astro-server",
+      "should_trigger": true,
+      "prompt": "In this Astro project, add a page at /visits that shows how many times the current visitor has loaded it. Keep the count in server-side session storage, not in a cookie value or in the browser.",
+      "expected_output": "A /visits page rendered on demand reads the visitor's count from the Astro session, increments it, stores it and displays it. The project builds.",
+      "assertions": [
+        "The page is rendered on demand.",
+        "The count is read with an awaited `Astro.session.get()` and stored with `Astro.session.set()`.",
+        "No session driver is configured by hand; the Node adapter provides one."
+      ],
+      "build_check": true,
+      "file_checks": [
+        {
+          "id": "session-read",
+          "path": "src/pages/visits.astro",
+          "contains": [
+            "await\\s+(Astro\\.)?session\\??\\.get\\("
+          ]
+        },
+        {
+          "id": "session-write",
+          "path": "src/pages/visits.astro",
+          "contains": [
+            "(Astro\\.)?session\\??\\.set\\("
+          ]
+        },
+        {
+          "id": "rendered-on-demand",
+          "any_of": [
+            {
+              "path": "src/pages/visits.astro",
+              "contains": [
+                "prerender\\s*=\\s*false"
+              ]
+            },
+            {
+              "path": "astro.config.*",
+              "contains": [
+                "output\\s*:\\s*['\"]server['\"]"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "react-island",
+      "fixture": "astro-react",
+      "should_trigger": true,
+      "prompt": "In this Astro project, add the Counter component from src/components/Counter.jsx to the home page, below the paragraph, so visitors can use it.",
+      "expected_output": "The home page renders the Counter component as a hydrated island, so its buttons work in the browser.",
+      "assertions": [
+        "The Counter is rendered with a `client:*` directive.",
+        "The built home page contains an island for the component."
+      ],
+      "file_checks": [
+        {
+          "id": "client-directive",
+          "path": "src/pages/index.astro",
+          "contains": [
+            "<Counter[^>]*\\sclient:(load|idle|visible|media|only)"
+          ]
+        }
+      ],
+      "output_checks": [
+        {
+          "id": "island-emitted",
+          "path": "index.html",
+          "contains": [
+            "<astro-island"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "negative-word-count",
+      "prompt": "Count how many times each word appears in word-list.txt and write the counts to counts.txt, one \"word count\" pair per line, sorted from most to least frequent.",
+      "fixture": "notes",
+      "should_trigger": false,
+      "expected_output": "counts.txt lists apple 3, banana 2 and cherry 1, in that order.",
+      "assertions": [
+        "counts.txt reports apple 3, banana 2, cherry 1.",
+        "The counts are listed from most to least frequent."
+      ],
+      "file_checks": [
+        {
+          "id": "counts-file",
+          "path": "counts.txt",
+          "contains": [
+            "apple\\D*3",
+            "banana\\D*2",
+            "cherry\\D*1"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "negative-vite-react",
+      "prompt": "In this Vite and React project, add a Counter component with increment and decrement buttons and render it in App.",
+      "fixture": "vite-react",
+      "should_trigger": false,
+      "expected_output": "A Counter React component with working increment and decrement buttons exists and App renders it. The project remains a plain Vite and React app.",
+      "assertions": [
+        "A Counter component keeps its count in React state and has increment and decrement buttons.",
+        "App renders the Counter component.",
+        "No Astro dependency or configuration is added to the project."
+      ],
+      "file_checks": [
+        {
+          "id": "counter-component",
+          "path": "src/**/*.jsx",
+          "contains": [
+            "useState"
+          ]
+        },
+        {
+          "id": "no-astro-dependency",
+          "path": "package.json",
+          "not_contains": [
+            "\"astro\""
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+node_modules/
+.DS_Store
+*.log
+
+# Evaluation output (never committed)
+reports/
+.eval-runs/
+
+# Python tooling
+.venv/
+__pycache__/
+
+# Local agent state
+.claude/settings.local.json
+
+# Local provider keys
+.env
+.env.*
+!.env.example
+
+# Generated Harbor tasks and results
+.eval-tasks/
+.eval-results/

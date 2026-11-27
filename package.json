@@ -1,0 +1,25 @@
+{
+  "name": "@withastro/skills",
+  "private": true,
+  "type": "module",
+  "description": "Official Astro agent skills.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/withastro/skills"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "validate": "for skill in skills/*/; do uvx --python 3.13 --from skills-ref agentskills validate \"$skill\" || exit 1; done",
+    "check:tier1": "for skill in skills/*/; do skillevaluator tier1 \"$skill\" --no-llm -o \"reports/tier1/$(basename \"$skill\")\" || exit 1; done",
+    "check:tier2": "node scripts/dedup.mjs",
+    "check:harness": "for skill in skills/*/; do skillevaluator harness-check \"$skill\"; done",
+    "eval:check": "node scripts/eval-matrix.mjs --check",
+    "eval:verify": "node scripts/eval-matrix.mjs --verify",
+    "eval:dry": "node scripts/eval-matrix.mjs --dry-run",
+    "eval": "node scripts/eval-matrix.mjs",
+    "eval:summary": "node scripts/eval-matrix.mjs --summary-only"
+  }
+}
